@@ -188,6 +188,95 @@
   }
   .search-bar input:focus { outline: none; border-color: #1a4d2e; }
 
+  /* Tabs */
+  .tabs-bar {
+    display: flex;
+    background: #fff;
+    border-bottom: 1px solid #e6e8ec;
+    position: sticky; top: 64px; z-index: 6;
+  }
+  .tab {
+    flex: 1;
+    padding: 12px 8px;
+    background: transparent;
+    color: #777;
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    transition: all .15s;
+  }
+  .tab.active {
+    color: #1a4d2e;
+    border-bottom-color: #1a4d2e;
+    background: #f4f9f5;
+  }
+  .tab:active { background: #e6f1ea; }
+
+  /* Mode scan */
+  .scan-mode {
+    padding: 16px;
+    padding-bottom: 100px;
+    min-height: calc(100vh - 200px);
+  }
+  .scan-search-wrap {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .scan-search-input {
+    width: 100%;
+    padding: 20px 50px 20px 20px;
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    border: 3px solid #1a4d2e;
+    border-radius: 16px;
+    background: #fff;
+    text-transform: lowercase;
+    letter-spacing: 2px;
+  }
+  .scan-search-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(26, 77, 46, 0.15);
+  }
+  .scan-search-input::placeholder {
+    color: #ccc;
+    font-weight: 500;
+    letter-spacing: normal;
+    font-size: 18px;
+  }
+  .scan-clear {
+    position: absolute;
+    right: 12px; top: 50%;
+    transform: translateY(-50%);
+    width: 36px; height: 36px;
+    background: #f0f0f0;
+    border-radius: 50%;
+    font-size: 16px;
+    color: #555;
+  }
+  .scan-hint {
+    text-align: center;
+    padding: 40px 20px;
+    color: #555;
+  }
+  .scan-results {
+    /* Cartes plus grandes en mode scan */
+  }
+  .scan-results .product-card {
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .scan-results .designation {
+    font-size: 16px;
+  }
+  .scan-results .dest-cell .qty {
+    font-size: 24px;
+  }
+  .scan-results .btn-validate {
+    padding: 16px;
+    font-size: 16px;
+  }
+
   /* Bottom action bar */
   .bottom-bar {
     position: fixed; bottom: 0; left: 0; right: 0;
@@ -785,6 +874,14 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onB
   const [search, setSearch] = useState("");
   const [editingKey, setEditingKey] = useState(null);
   const [toast, setToast] = useState("");
+  const [viewMode, setViewMode] = useState(localStorage.getItem("dispatch_view_mode") || "list"); // "list" | "scan"
+  const [showDone, setShowDone] = useState(false); // onglet Dispatchés
+  const searchInputRef = useRef(null);
+
+  // Sauvegarde le mode choisi
+  useEffect(() => {
+    localStorage.setItem("dispatch_view_mode", viewMode);
+  }, [viewMode]);
 
   // Renouvelle le lock toutes les 10s sur les lignes que je tiens
   useEffect(() => {
@@ -805,15 +902,27 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onB
       .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
   }, [products]);
 
-  // Filtre par recherche
+  // Sépare les produits dispatchés des non dispatchés
+  const { notDoneProducts, doneProducts } = useMemo(() => {
+    const notDone = [];
+    const done = [];
+    sortedProducts.forEach(p => {
+      if (state[p._pkey]?.done) done.push(p);
+      else notDone.push(p);
+    });
+    return { notDoneProducts: notDone, doneProducts: done };
+  }, [sortedProducts, state]);
+
+  // Filtre par recherche selon l'onglet actif
   const filtered = useMemo(() => {
-    if (!search.trim()) return sortedProducts;
+    const source = showDone ? doneProducts : notDoneProducts;
+    if (!search.trim()) return source;
     const q = stripAccents(search.toLowerCase());
-    return sortedProducts.filter(p =>
+    return source.filter(p =>
       stripAccents(p.designation.toLowerCase()).includes(q) ||
       (p.article || "").includes(q)
     );
-  }, [sortedProducts, search]);
+  }, [notDoneProducts, doneProducts, showDone, search]);
 
   const stats = useMemo(() => {
     const total = sortedProducts.length;
@@ -856,6 +965,15 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onB
 
   const editingProduct = editingKey ? sortedProducts.find(p => p._pkey === editingKey) : null;
 
+  // Quand on est en mode scan et qu'on valide, on vide la recherche pour le prochain produit
+  const handleValidateScan = (pkey, qtys) => {
+    handleValidate(pkey, qtys);
+    if (viewMode === "scan") {
+      setSearch("");
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+  };
+
   return (
     <div className="app">
       <div className="header">
@@ -869,6 +987,13 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onB
             </div>
           </div>
           <div className="header-actions">
+            <button
+              className="header-btn"
+              onClick={() => setViewMode(viewMode === "list" ? "scan" : "list")}
+              style={{background: viewMode === "scan" ? "#ffb300" : "rgba(255,255,255,.15)"}}
+            >
+              {viewMode === "scan" ? "📋 Mode liste" : "⚡ Mode scan"}
+            </button>
             <button className="header-btn" onClick={onBack}>Retour</button>
           </div>
         </div>
@@ -881,35 +1006,127 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onB
         </div>
       </div>
 
-      <div className="search-bar">
-        <input
-          type="text"
-          placeholder="🔍 Chercher un produit..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      {/* Onglets À faire / Dispatchés */}
+      <div className="tabs-bar">
+        <button
+          className={`tab ${!showDone ? "active" : ""}`}
+          onClick={() => { setShowDone(false); setSearch(""); }}
+        >
+          À faire ({notDoneProducts.length})
+        </button>
+        <button
+          className={`tab ${showDone ? "active" : ""}`}
+          onClick={() => { setShowDone(true); setSearch(""); }}
+        >
+          ✓ Dispatchés ({doneProducts.length})
+        </button>
       </div>
 
-      <div className="product-list">
-        {filtered.length === 0 && (
-          <div style={{textAlign: "center", padding: 40, color: "#999"}}>
-            Aucun résultat
+      {/* Mode SCAN : recherche géante centrée, peu de résultats */}
+      {viewMode === "scan" && !showDone && (
+        <div className="scan-mode">
+          <div className="scan-search-wrap">
+            <input
+              ref={searchInputRef}
+              className="scan-search-input"
+              type="text"
+              placeholder="Tape 2-3 lettres..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            {search && (
+              <button className="scan-clear" onClick={() => { setSearch(""); searchInputRef.current?.focus(); }}>
+                ✕
+              </button>
+            )}
           </div>
-        )}
-        {filtered.map(p => (
-          <ProductCard
-            key={p._pkey}
-            product={p}
-            pkey={p._pkey}
-            status={state[p._pkey] || {}}
-            operator={operator}
-            onLock={lockRow}
-            onValidate={handleValidate}
-            onUndo={handleUndo}
-            onEdit={handleEdit}
-          />
-        ))}
-      </div>
+
+          {!search.trim() && (
+            <div className="scan-hint">
+              <div style={{fontSize: 40, marginBottom: 8}}>⚡</div>
+              <div style={{fontWeight: 600, marginBottom: 4}}>Mode scan rapide</div>
+              <div style={{fontSize: 13, color: "#666"}}>
+                Tape les premières lettres du produit que tu tiens dans la main
+              </div>
+              <div style={{fontSize: 12, color: "#999", marginTop: 12}}>
+                {notDoneProducts.length} produits restants
+              </div>
+            </div>
+          )}
+
+          {search.trim() && filtered.length === 0 && (
+            <div className="scan-hint">
+              <div style={{fontSize: 30, marginBottom: 8}}>🔍</div>
+              <div style={{color: "#999"}}>Aucun produit ne correspond à "<b>{search}</b>"</div>
+              <div style={{fontSize: 12, color: "#aaa", marginTop: 8}}>
+                Vérifie l'orthographe ou bascule en mode liste
+              </div>
+            </div>
+          )}
+
+          {search.trim() && filtered.length > 0 && (
+            <div className="scan-results">
+              {filtered.slice(0, 5).map(p => (
+                <ProductCard
+                  key={p._pkey}
+                  product={p}
+                  pkey={p._pkey}
+                  status={state[p._pkey] || {}}
+                  operator={operator}
+                  onLock={lockRow}
+                  onValidate={handleValidateScan}
+                  onUndo={handleUndo}
+                  onEdit={handleEdit}
+                />
+              ))}
+              {filtered.length > 5 && (
+                <div style={{textAlign: "center", color: "#999", fontSize: 12, padding: 8}}>
+                  + {filtered.length - 5} autres résultats... précise ta recherche
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mode LISTE classique ou onglet Dispatchés */}
+      {(viewMode === "list" || showDone) && (
+        <>
+          <div className="search-bar">
+            <input
+              type="text"
+              placeholder={showDone ? "🔍 Chercher dans les dispatchés..." : "🔍 Chercher un produit..."}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="product-list">
+            {filtered.length === 0 && (
+              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
+                {showDone
+                  ? (search.trim() ? "Aucun résultat" : "Aucun produit dispatché pour l'instant")
+                  : (search.trim() ? "Aucun résultat" : "🎉 Tous les produits sont dispatchés !")
+                }
+              </div>
+            )}
+            {filtered.map(p => (
+              <ProductCard
+                key={p._pkey}
+                product={p}
+                pkey={p._pkey}
+                status={state[p._pkey] || {}}
+                operator={operator}
+                onLock={lockRow}
+                onValidate={handleValidate}
+                onUndo={handleUndo}
+                onEdit={handleEdit}
+              />
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="bottom-bar">
         <div className="stats">
