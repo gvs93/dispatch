@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Kelbongoo - Dispatch Palette</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Firebase (compat builds, comme l'app prep) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f5f7;
+    color: #1a1a1a;
+    overscroll-behavior: none;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; }
+  input { font-family: inherit; }
+
+  .app { max-width: 900px; margin: 0 auto; min-height: 100vh; background: #fff; }
+
+  /* Header */
+  .header {
+    position: sticky; top: 0; z-index: 10;
+    background: #1a4d2e;
+    color: #fff;
+    padding: 12px 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .3px; }
+  .header .sub { font-size: 12px; opacity: .85; margin-top: 2px; }
+  .header-actions { display: flex; gap: 8px; }
+  .header-btn {
+    background: rgba(255,255,255,.15);
+    color: #fff; padding: 6px 12px; border-radius: 6px;
+    font-size: 13px; font-weight: 600;
+  }
+  .header-btn:active { background: rgba(255,255,255,.3); }
+
+  /* Login / Upload screens */
+  .screen-center {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  .logo {
+    font-size: 28px; font-weight: 800; color: #1a4d2e;
+    margin-bottom: 8px; letter-spacing: -.5px;
+  }
+  .tag { color: #666; font-size: 14px; margin-bottom: 32px; }
+  .card {
+    width: 100%; max-width: 360px;
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    padding: 24px;
+  }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #555; }
+  .field input, .field select {
+    width: 100%; padding: 12px; font-size: 16px;
+    border: 1.5px solid #ddd; border-radius: 8px; background: #fff;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: #1a4d2e; }
+  .btn-primary {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+    background: #1a4d2e; color: #fff; border-radius: 8px;
+    transition: background .15s;
+  }
+  .btn-primary:active { background: #0d3d20; }
+  .btn-primary:disabled { background: #aaa; }
+  .btn-secondary {
+    width: 100%; padding: 12px; font-size: 14px; font-weight: 600;
+    background: #f0f0f0; color: #333; border-radius: 8px;
+    margin-top: 8px;
+  }
+
+  /* Upload */
+  .upload-zone {
+    border: 2px dashed #1a4d2e; border-radius: 12px;
+    padding: 32px 16px; text-align: center;
+    background: #f4f9f5; cursor: pointer;
+  }
+  .upload-zone:active { background: #e6f1ea; }
+  .upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
+  .upload-zone .label { font-weight: 600; color: #1a4d2e; }
+  .upload-zone .hint { font-size: 12px; color: #666; margin-top: 4px; }
+
+  /* Progress bar */
+  .progress-bar {
+    background: #e6e8ec; height: 6px; border-radius: 3px; overflow: hidden;
+    margin-top: 8px;
+  }
+  .progress-fill {
+    height: 100%; background: #4caf50;
+    transition: width .3s ease;
+  }
+  .progress-text {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: #666; margin-top: 4px;
+  }
+
+  /* Product list */
+  .product-list { padding: 8px; padding-bottom: 100px; }
+  .product-card {
+    background: #fff; border: 1.5px solid #e6e8ec;
+    border-radius: 10px; padding: 12px; margin-bottom: 8px;
+    transition: all .2s;
+  }
+  .product-card.locked {
+    background: #fff8e1; border-color: #ffb300;
+  }
+  .product-card.done {
+    background: #e8f5e9; border-color: #4caf50; opacity: .7;
+  }
+  .product-card.done .designation { text-decoration: line-through; color: #555; }
+
+  .designation {
+    font-size: 14px; font-weight: 600;
+    line-height: 1.3; margin-bottom: 6px;
+  }
+  .product-meta {
+    font-size: 11px; color: #777; margin-bottom: 8px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .product-meta .article { font-family: monospace; }
+  .product-meta .recu { color: #1a4d2e; font-weight: 600; }
+
+  .dest-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px; margin-bottom: 8px;
+  }
+  .dest-cell {
+    background: #f4f5f7; border-radius: 6px;
+    padding: 8px 4px; text-align: center;
+  }
+  .dest-cell .name { font-size: 10px; font-weight: 700; color: #666; letter-spacing: .5px; }
+  .dest-cell .qty { font-size: 20px; font-weight: 800; color: #1a4d2e; margin-top: 2px; }
+  .dest-cell .qty.zero { color: #ccc; }
+
+  .actions-row { display: flex; gap: 6px; }
+  .btn-validate {
+    flex: 1; padding: 12px; font-size: 14px; font-weight: 700;
+    background: #1a4d2e; color: #fff; border-radius: 8px;
+  }
+  .btn-validate:active { background: #0d3d20; }
+  .btn-edit {
+    padding: 12px 14px; font-size: 14px;
+    background: #f0f0f0; color: #555; border-radius: 8px;
+  }
+  .btn-undo {
+    flex: 1; padding: 10px; font-size: 13px; font-weight: 600;
+    background: #fff; color: #4caf50; border: 1.5px solid #4caf50; border-radius: 8px;
+  }
+
+  .lock-badge {
+    background: #ffb300; color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 8px; border-radius: 10px;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .done-badge {
+    background: #4caf50; color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 8px; border-radius: 10px;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .timestamp {
+    font-size: 10px; color: #888; font-weight: 500;
+  }
+
+  /* Search bar */
+  .search-bar {
+    position: sticky; top: 64px; z-index: 5;
+    background: #fff; padding: 8px 12px;
+    border-bottom: 1px solid #e6e8ec;
+  }
+  .search-bar input {
+    width: 100%; padding: 10px 12px; font-size: 15px;
+    border: 1.5px solid #ddd; border-radius: 8px;
+  }
+  .search-bar input:focus { outline: none; border-color: #1a4d2e; }
+
+  /* Bottom action bar */
+  .bottom-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; border-top: 1px solid #e6e8ec;
+    padding: 12px 16px; box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+    z-index: 10;
+  }
+  .bottom-bar .stats {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: #666; margin-bottom: 8px;
+  }
+  .btn-finish {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+    background: #4caf50; color: #fff; border-radius: 8px;
+  }
+  .btn-finish:disabled { background: #aaa; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; padding: 16px;
+  }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 20px;
+    width: 100%; max-width: 360px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 12px 0; font-size: 16px; }
+  .modal .designation-modal { font-size: 13px; color: #555; margin-bottom: 16px; }
+  .edit-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px; margin-bottom: 16px;
+  }
+  .edit-cell label { font-size: 11px; font-weight: 700; color: #666; }
+  .edit-cell input {
+    width: 100%; padding: 10px; font-size: 18px; font-weight: 700;
+    text-align: center; border: 1.5px solid #ddd; border-radius: 6px;
+    margin-top: 4px;
+  }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-actions button { flex: 1; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+  .btn-cancel { background: #f0f0f0; color: #555; }
+  .btn-confirm { background: #1a4d2e; color: #fff; }
+
+  /* Recap */
+  .recap-section { padding: 16px; padding-bottom: 100px; }
+  .recap-card {
+    background: #fff; border-radius: 12px;
+    padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.05);
+  }
+  .recap-card h3 { margin: 0 0 12px 0; font-size: 15px; }
+  .recap-stat {
+    display: flex; justify-content: space-between;
+    padding: 6px 0; border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+  }
+  .recap-stat:last-child { border-bottom: none; }
+  .recap-stat .label { color: #666; }
+  .recap-stat .value { font-weight: 700; color: #1a4d2e; }
+
+  .anomaly-item {
+    padding: 10px; border-radius: 6px;
+    background: #fff3e0; border-left: 3px solid #ff9800;
+    font-size: 12px; margin-bottom: 6px;
+  }
+  .anomaly-item .product { font-weight: 600; }
+  .anomaly-item .detail { color: #666; margin-top: 2px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 10px 16px;
+    border-radius: 8px; font-size: 13px; z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  }
+
+  /* Connection status */
+  .conn-status {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(255,255,255,.2);
+  }
+  .conn-status.offline { background: #d32f2f; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* =========================================================================
+   CONFIGURATION
+   ========================================================================= */
+
+// Firebase config - projet kelbongoo-prep (app Dispatch)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDtcoRoknYM4JrJJfcuhpnVMeS-OurwYdU",
+  authDomain: "kelbongoo-prep.firebaseapp.com",
+  databaseURL: "https://kelbongoo-prep-default-rtdb.firebaseio.com",
+  projectId: "kelbongoo-prep",
+  storageBucket: "kelbongoo-prep.firebasestorage.app",
+  messagingSenderId: "596701505006",
+  appId: "1:596701505006:web:3f2f8d3f0f43ca828e5aff"
+};
+
+// URL Apps Script pour envoi du récap (Kelbongoo Distribution Proxy)
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj8BOPRY7V_Ni_0a-6YmNA-1HyRAcf0QXAL1FMy04Xnp1W4Am-cNuR4poQOHzu4VCL4Q/exec";
+
+// Durée de verrouillage d'une ligne (ms) - 30s sans renouvellement = auto-déverrouillage
+const LOCK_DURATION_MS = 30000;
+const LOCK_REFRESH_MS = 10000;
+
+// Init Firebase
+let db = null;
+let firebaseReady = false;
+try {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.database();
+  firebaseReady = true;
+} catch(e) { console.error("Firebase init failed", e); }
+
+/* =========================================================================
+   HELPERS
+   ========================================================================= */
+
+const fmtTime = (ts) => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+};
+
+const fmtDuration = (ms) => {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h${(m%60).toString().padStart(2,"0")}`;
+  if (m > 0) return `${m}min ${s%60}s`;
+  return `${s}s`;
+};
+
+const stripAccents = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+// Identifiant stable pour une ligne (basé sur le code article + index pour les cas sans code)
+const productKey = (p, idx) => {
+  const code = (p.article || "").toString().trim();
+  if (code) return `a_${code}`;
+  return `l_${idx}`;
+};
+
+/* =========================================================================
+   EXCEL PARSING
+   ========================================================================= */
+
+// Normalise un nom de colonne pour le matching (sans accents, lowercase, trim)
+const normCol = (s) => stripAccents((s||"").toString()).toLowerCase().trim();
+
+// Détecte la structure du fichier en cherchant la ligne d'en-têtes
+function parseExcelFile(workbook) {
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+  // Cherche la ligne d'en-têtes (contient "article" et "designation" ou "ROB" ou "TOL" ou "PDP")
+  let headerIdx = -1;
+  let headers = null;
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = rows[i].map(c => normCol(c));
+    const hasArt = row.some(c => c === "article");
+    const hasDesig = row.some(c => c.includes("designation"));
+    const hasDest = row.some(c => ["rob","tol","pdp"].includes(c));
+    if ((hasArt && hasDesig) || (hasDesig && hasDest)) {
+      headerIdx = i;
+      headers = rows[i];
+      break;
+    }
+  }
+  if (headerIdx === -1) {
+    throw new Error("Impossible de trouver les en-têtes (Article / désignation / ROB / TOL / PDP) dans le fichier.");
+  }
+
+  // Map des colonnes
+  const colMap = {};
+  headers.forEach((h, idx) => {
+    const n = normCol(h);
+    if (n === "article") colMap.article = idx;
+    else if (n.includes("designation")) colMap.designation = idx;
+    else if (n.includes("cmd")) colMap.cmd = idx;
+    else if (n.includes("recept")) colMap.recue = idx;
+    else if (n === "rob") colMap.rob = idx;
+    else if (n === "tol") colMap.tol = idx;
+    else if (n === "pdp") colMap.pdp = idx;
+  });
+
+  // Parse les lignes produit
+  const products = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every(c => c === "" || c === null || c === undefined)) continue;
+
+    const designation = (row[colMap.designation] || "").toString().trim();
+    if (!designation) continue;
+
+    // Parse les quantités - peuvent être "0", "12", "12u = 2.798000", etc.
+    const parseQty = (v) => {
+      if (v === "" || v === null || v === undefined) return 0;
+      const s = v.toString().trim();
+      // Format "12u = 2.798000" -> 12
+      const m = s.match(/^(\d+)\s*u/);
+      if (m) return parseInt(m[1], 10);
+      const n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
+    };
+
+    products.push({
+      article: (row[colMap.article] || "").toString().trim(),
+      designation,
+      cmd: parseQty(row[colMap.cmd]),
+      recue: parseQty(row[colMap.recue]),
+      rob: parseQty(row[colMap.rob]),
+      tol: parseQty(row[colMap.tol]),
+      pdp: parseQty(row[colMap.pdp])
+    });
+  }
+
+  return products;
+}
+
+/* =========================================================================
+   FIREBASE / STATE SYNC
+   ========================================================================= */
+
+// Une session = un dispatch en cours, identifiée par un sessionId
+// Structure dans Firebase:
+//   /dispatch/{sessionId}/meta : { supplier, startedAt, operators: [...], products: [...] }
+//   /dispatch/{sessionId}/state/{productKey} : { done, doneBy, doneAt, lockedBy, lockedAt, qtyRob, qtyTol, qtyPdp }
+
+function useFirebaseSession(sessionId, operatorName) {
+  const [state, setState] = useState({});
+  const [meta, setMeta] = useState(null);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!firebaseReady || !sessionId) return;
+
+    const stateRef = db.ref(`dispatch/${sessionId}/state`);
+    const metaRef = db.ref(`dispatch/${sessionId}/meta`);
+    const connectedRef = db.ref(".info/connected");
+
+    const onState = (snap) => setState(snap.val() || {});
+    const onMeta = (snap) => setMeta(snap.val() || null);
+    const onConn = (snap) => setConnected(!!snap.val());
+
+    stateRef.on("value", onState);
+    metaRef.on("value", onMeta);
+    connectedRef.on("value", onConn);
+
+    return () => {
+      stateRef.off("value", onState);
+      metaRef.off("value", onMeta);
+      connectedRef.off("value", onConn);
+    };
+  }, [sessionId]);
+
+  // Mise à jour locale (fallback si pas Firebase)
+  const updateLocal = useCallback((key, patch) => {
+    setState(prev => ({ ...prev, [key]: { ...(prev[key] || {}), ...patch } }));
+  }, []);
+
+  const lockRow = useCallback((key) => {
+    const patch = { lockedBy: operatorName, lockedAt: Date.now() };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, operatorName, updateLocal]);
+
+  const unlockRow = useCallback((key) => {
+    const patch = { lockedBy: null, lockedAt: null };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, updateLocal]);
+
+  const validateRow = useCallback((key, qtys) => {
+    const patch = {
+      done: true,
+      doneBy: operatorName,
+      doneAt: Date.now(),
+      lockedBy: null,
+      lockedAt: null,
+      ...(qtys || {})
+    };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, operatorName, updateLocal]);
+
+  const undoRow = useCallback((key) => {
+    const patch = { done: false, doneBy: null, doneAt: null };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, updateLocal]);
+
+  const initSession = useCallback((supplier, products) => {
+    const metaData = {
+      supplier,
+      startedAt: Date.now(),
+      products,
+    };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/meta`).set(metaData);
+    } else {
+      setMeta(metaData);
+    }
+  }, [sessionId]);
+
+  return { state, meta, connected: firebaseReady ? connected : true, lockRow, unlockRow, validateRow, undoRow, initSession };
+}
+
+/* =========================================================================
+   COMPOSANTS
+   ========================================================================= */
+
+function LoginScreen({ onLogin }) {
+  const [name, setName] = useState(localStorage.getItem("dispatch_operator") || "");
+
+  const submit = () => {
+    if (!name.trim()) return;
+    localStorage.setItem("dispatch_operator", name.trim());
+    onLogin(name.trim());
+  };
+
+  return (
+    <div className="screen-center">
+      <div className="logo">Kelbongoo</div>
+      <div className="tag">Dispatch Palette</div>
+      <div className="card">
+        <div className="field">
+          <label>Ton prénom</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: Marie"
+            autoFocus
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
+        </div>
+        <button className="btn-primary" onClick={submit} disabled={!name.trim()}>
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UploadScreen({ operator, onSessionStart, onJoinSession }) {
+  const [error, setError] = useState("");
+  const [joinId, setJoinId] = useState("");
+  const fileRef = useRef(null);
+
+  // Vérifie si une session est déjà active (autre opérateur a déjà uploadé)
+  const [activeSessions, setActiveSessions] = useState([]);
+  useEffect(() => {
+    if (!firebaseReady) return;
+    const ref = db.ref("dispatch");
+    const handler = (snap) => {
+      const all = snap.val() || {};
+      const recent = [];
+      const now = Date.now();
+      Object.entries(all).forEach(([sid, s]) => {
+        if (s.meta && s.meta.startedAt && (now - s.meta.startedAt) < 8 * 3600 * 1000) {
+          // Sessions des 8 dernières heures
+          const total = (s.meta.products || []).length;
+          const done = Object.values(s.state || {}).filter(x => x && x.done).length;
+          if (done < total) {
+            recent.push({ id: sid, supplier: s.meta.supplier, startedAt: s.meta.startedAt, total, done });
+          }
+        }
+      });
+      recent.sort((a,b) => b.startedAt - a.startedAt);
+      setActiveSessions(recent);
+    };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, []);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setError("");
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const products = parseExcelFile(wb);
+      if (products.length === 0) {
+        setError("Aucun produit trouvé dans le fichier.");
+        return;
+      }
+      // Devine le nom du fournisseur depuis le nom de fichier
+      let supplier = file.name.replace(/\.(xlsx?|csv)$/i, "").trim();
+      // Nettoie un peu (enlève "dispatch", dates, etc.)
+      supplier = supplier.replace(/dispatch/gi, "").replace(/\d{4,}/g, "").trim();
+      if (!supplier) supplier = "Fournisseur";
+
+      const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
+      onSessionStart(sessionId, supplier, products);
+    } catch (e) {
+      setError(`Erreur de lecture: ${e.message}`);
+    }
+  };
+
+  return (
+    <div className="screen-center">
+      <div className="logo">Kelbongoo</div>
+      <div className="tag">Bonjour {operator} 👋</div>
+
+      <div className="card">
+        <h3 style={{margin: "0 0 12px 0", fontSize: 15}}>Démarrer un nouveau dispatch</h3>
+        <div
+          className="upload-zone"
+          onClick={() => fileRef.current?.click()}
+        >
+          <div className="icon">📥</div>
+          <div className="label">Charger le fichier Excel</div>
+          <div className="hint">.xlsx ou .xls</div>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{display: "none"}}
+          onChange={(e) => handleFile(e.target.files[0])}
+        />
+        {error && <div style={{color: "#d32f2f", fontSize: 13, marginTop: 12}}>{error}</div>}
+      </div>
+
+      {activeSessions.length > 0 && (
+        <div className="card" style={{marginTop: 16}}>
+          <h3 style={{margin: "0 0 12px 0", fontSize: 15}}>Rejoindre un dispatch en cours</h3>
+          {activeSessions.map(s => (
+            <button
+              key={s.id}
+              className="btn-secondary"
+              style={{textAlign: "left", padding: 14, marginBottom: 6}}
+              onClick={() => onJoinSession(s.id)}
+            >
+              <div style={{fontWeight: 700, marginBottom: 2}}>{s.supplier}</div>
+              <div style={{fontSize: 11, color: "#666"}}>
+                Démarré à {fmtTime(s.startedAt)} • {s.done}/{s.total} produits faits
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!firebaseReady && (
+        <div style={{fontSize: 11, color: "#999", marginTop: 16, textAlign: "center", maxWidth: 360}}>
+          ⚠️ Firebase non configuré. Mode local uniquement (pas de partage temps réel).
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductCard({ product, pkey, status, operator, onLock, onValidate, onUndo, onEdit }) {
+  const isLocked = status.lockedBy && status.lockedBy !== operator;
+  const lockExpired = status.lockedAt && (Date.now() - status.lockedAt) > LOCK_DURATION_MS;
+  const reallyLocked = isLocked && !lockExpired;
+  const isDone = status.done;
+  const isMine = status.lockedBy === operator;
+
+  // Quantités (effectives, peuvent avoir été modifiées)
+  const qtyRob = status.qtyRob !== undefined ? status.qtyRob : product.rob;
+  const qtyTol = status.qtyTol !== undefined ? status.qtyTol : product.tol;
+  const qtyPdp = status.qtyPdp !== undefined ? status.qtyPdp : product.pdp;
+
+  const cls = `product-card ${isDone ? "done" : ""} ${reallyLocked ? "locked" : ""}`;
+
+  return (
+    <div className={cls}>
+      {reallyLocked && (
+        <div className="lock-badge">🔒 {status.lockedBy} est dessus</div>
+      )}
+      {isDone && (
+        <div className="done-badge">
+          ✓ {status.doneBy} • {fmtTime(status.doneAt)}
+        </div>
+      )}
+
+      <div className="designation">{product.designation}</div>
+      <div className="product-meta">
+        {product.article && <span className="article">{product.article}</span>}
+        <span className="recu">Reçu: {product.recue}</span>
+      </div>
+
+      <div className="dest-row">
+        <div className="dest-cell">
+          <div className="name">ROB</div>
+          <div className={`qty ${qtyRob === 0 ? "zero" : ""}`}>{qtyRob}</div>
+        </div>
+        <div className="dest-cell">
+          <div className="name">TOL</div>
+          <div className={`qty ${qtyTol === 0 ? "zero" : ""}`}>{qtyTol}</div>
+        </div>
+        <div className="dest-cell">
+          <div className="name">PDP</div>
+          <div className={`qty ${qtyPdp === 0 ? "zero" : ""}`}>{qtyPdp}</div>
+        </div>
+      </div>
+
+      {!isDone && !reallyLocked && (
+        <div className="actions-row">
+          <button
+            className="btn-validate"
+            onClick={() => onValidate(pkey, { qtyRob, qtyTol, qtyPdp })}
+          >
+            ✓ Dispatché
+          </button>
+          <button className="btn-edit" onClick={() => onEdit(pkey)}>
+            ✎
+          </button>
+        </div>
+      )}
+
+      {isDone && (
+        <div className="actions-row">
+          <button className="btn-undo" onClick={() => onUndo(pkey)}>
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {reallyLocked && (
+        <div style={{fontSize: 12, color: "#888", textAlign: "center", padding: "8px 0"}}>
+          En cours par {status.lockedBy}...
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditModal({ product, status, onSave, onClose }) {
+  const [rob, setRob] = useState(status.qtyRob !== undefined ? status.qtyRob : product.rob);
+  const [tol, setTol] = useState(status.qtyTol !== undefined ? status.qtyTol : product.tol);
+  const [pdp, setPdp] = useState(status.qtyPdp !== undefined ? status.qtyPdp : product.pdp);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Ajuster les quantités</h3>
+        <div className="designation-modal">{product.designation}</div>
+        <div className="edit-grid">
+          <div className="edit-cell">
+            <label>ROB</label>
+            <input type="number" value={rob} onChange={(e) => setRob(parseInt(e.target.value)||0)} min="0" />
+          </div>
+          <div className="edit-cell">
+            <label>TOL</label>
+            <input type="number" value={tol} onChange={(e) => setTol(parseInt(e.target.value)||0)} min="0" />
+          </div>
+          <div className="edit-cell">
+            <label>PDP</label>
+            <input type="number" value={pdp} onChange={(e) => setPdp(parseInt(e.target.value)||0)} min="0" />
+          </div>
+        </div>
+        <div style={{fontSize: 11, color: "#888", marginBottom: 12, textAlign: "center"}}>
+          Total: {rob + tol + pdp} / Reçu: {product.recue}
+          {(rob + tol + pdp) !== product.recue && (
+            <span style={{color: "#d32f2f", fontWeight: 700}}> ⚠️ écart</span>
+          )}
+        </div>
+        <div className="modal-actions">
+          <button className="btn-cancel" onClick={onClose}>Annuler</button>
+          <button className="btn-confirm" onClick={() => onSave({ qtyRob: rob, qtyTol: tol, qtyPdp: pdp })}>
+            Valider
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onBack }) {
+  const { state, meta, connected, lockRow, unlockRow, validateRow, undoRow } = useFirebaseSession(sessionId, operator);
+  const [search, setSearch] = useState("");
+  const [editingKey, setEditingKey] = useState(null);
+  const [toast, setToast] = useState("");
+
+  // Renouvelle le lock toutes les 10s sur les lignes que je tiens
+  useEffect(() => {
+    const t = setInterval(() => {
+      Object.entries(state).forEach(([k, v]) => {
+        if (v && v.lockedBy === operator && !v.done) {
+          lockRow(k);
+        }
+      });
+    }, LOCK_REFRESH_MS);
+    return () => clearInterval(t);
+  }, [state, operator, lockRow]);
+
+  // Tri alphabétique
+  const sortedProducts = useMemo(() => {
+    return products
+      .map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }))
+      .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
+  }, [products]);
+
+  // Filtre par recherche
+  const filtered = useMemo(() => {
+    if (!search.trim()) return sortedProducts;
+    const q = stripAccents(search.toLowerCase());
+    return sortedProducts.filter(p =>
+      stripAccents(p.designation.toLowerCase()).includes(q) ||
+      (p.article || "").includes(q)
+    );
+  }, [sortedProducts, search]);
+
+  const stats = useMemo(() => {
+    const total = sortedProducts.length;
+    const done = sortedProducts.filter(p => state[p._pkey]?.done).length;
+    return { total, done, remaining: total - done };
+  }, [sortedProducts, state]);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 1500);
+  };
+
+  const handleValidate = (pkey, qtys) => {
+    validateRow(pkey, qtys);
+    showToast("✓ Validé");
+  };
+
+  const handleUndo = (pkey) => {
+    undoRow(pkey);
+    showToast("↶ Annulé");
+  };
+
+  const handleEdit = (pkey) => {
+    lockRow(pkey);
+    setEditingKey(pkey);
+  };
+
+  const handleEditSave = (qtys) => {
+    if (editingKey) {
+      validateRow(editingKey, qtys);
+      showToast("✓ Ajusté et validé");
+    }
+    setEditingKey(null);
+  };
+
+  const handleEditCancel = () => {
+    if (editingKey) unlockRow(editingKey);
+    setEditingKey(null);
+  };
+
+  const editingProduct = editingKey ? sortedProducts.find(p => p._pkey === editingKey) : null;
+
+  return (
+    <div className="app">
+      <div className="header">
+        <div className="header-row">
+          <div>
+            <h1>{supplier}</h1>
+            <div className="sub">
+              {operator} • <span className={`conn-status ${!connected ? "offline" : ""}`}>
+                {connected ? "● en ligne" : "● hors ligne"}
+              </span>
+            </div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn" onClick={onBack}>Retour</button>
+          </div>
+        </div>
+        <div className="progress-bar">
+          <div className="progress-fill" style={{width: `${stats.total > 0 ? (stats.done/stats.total)*100 : 0}%`}}></div>
+        </div>
+        <div className="progress-text" style={{color: "rgba(255,255,255,.85)"}}>
+          <span>{stats.done} / {stats.total} produits</span>
+          <span>{stats.remaining} restants</span>
+        </div>
+      </div>
+
+      <div className="search-bar">
+        <input
+          type="text"
+          placeholder="🔍 Chercher un produit..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      <div className="product-list">
+        {filtered.length === 0 && (
+          <div style={{textAlign: "center", padding: 40, color: "#999"}}>
+            Aucun résultat
+          </div>
+        )}
+        {filtered.map(p => (
+          <ProductCard
+            key={p._pkey}
+            product={p}
+            pkey={p._pkey}
+            status={state[p._pkey] || {}}
+            operator={operator}
+            onLock={lockRow}
+            onValidate={handleValidate}
+            onUndo={handleUndo}
+            onEdit={handleEdit}
+          />
+        ))}
+      </div>
+
+      <div className="bottom-bar">
+        <div className="stats">
+          <span>Avancement: <b>{stats.done}/{stats.total}</b></span>
+          <span>{stats.total > 0 ? Math.round((stats.done/stats.total)*100) : 0}%</span>
+        </div>
+        <button
+          className="btn-finish"
+          onClick={() => onFinish(state, sortedProducts)}
+          disabled={stats.done === 0}
+        >
+          {stats.done === stats.total ? "✓ Terminer et envoyer le récap" : `Voir le récap (${stats.done} validés)`}
+        </button>
+      </div>
+
+      {editingProduct && (
+        <EditModal
+          product={editingProduct}
+          status={state[editingKey] || {}}
+          onSave={handleEditSave}
+          onClose={handleEditCancel}
+        />
+      )}
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+function RecapScreen({ sessionId, operator, supplier, products, state, onClose, onReset }) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+
+  // Analyse
+  const analysis = useMemo(() => {
+    const total = products.length;
+    const done = products.filter(p => state[p._pkey]?.done).length;
+    const notDone = products.filter(p => !state[p._pkey]?.done);
+
+    // Timestamps
+    const timestamps = products
+      .map(p => state[p._pkey]?.doneAt)
+      .filter(t => t)
+      .sort((a,b) => a - b);
+    const startedAt = timestamps[0];
+    const endedAt = timestamps[timestamps.length - 1];
+    const duration = startedAt && endedAt ? (endedAt - startedAt) : 0;
+
+    // Stats par opérateur
+    const byOp = {};
+    products.forEach(p => {
+      const s = state[p._pkey];
+      if (s?.done && s.doneBy) {
+        byOp[s.doneBy] = (byOp[s.doneBy] || 0) + 1;
+      }
+    });
+
+    // Ajustements (quantités modifiées)
+    const adjusted = products.filter(p => {
+      const s = state[p._pkey];
+      if (!s?.done) return false;
+      return (
+        (s.qtyRob !== undefined && s.qtyRob !== p.rob) ||
+        (s.qtyTol !== undefined && s.qtyTol !== p.tol) ||
+        (s.qtyPdp !== undefined && s.qtyPdp !== p.pdp)
+      );
+    });
+
+    return { total, done, notDone, startedAt, endedAt, duration, byOp, adjusted };
+  }, [products, state]);
+
+  const sendRecap = async () => {
+    setSending(true);
+    setError("");
+
+    const payload = {
+      action: "log-dispatch-recap",
+      sessionId,
+      supplier,
+      operator,
+      startedAt: analysis.startedAt ? new Date(analysis.startedAt).toISOString() : null,
+      endedAt: analysis.endedAt ? new Date(analysis.endedAt).toISOString() : null,
+      durationMs: analysis.duration,
+      total: analysis.total,
+      done: analysis.done,
+      notDone: analysis.notDone.length,
+      byOperator: analysis.byOp,
+      lines: products.map(p => {
+        const s = state[p._pkey] || {};
+        return {
+          article: p.article,
+          designation: p.designation,
+          recue: p.recue,
+          rob_prevu: p.rob,
+          tol_prevu: p.tol,
+          pdp_prevu: p.pdp,
+          rob_reel: s.qtyRob !== undefined ? s.qtyRob : p.rob,
+          tol_reel: s.qtyTol !== undefined ? s.qtyTol : p.tol,
+          pdp_reel: s.qtyPdp !== undefined ? s.qtyPdp : p.pdp,
+          done: !!s.done,
+          doneBy: s.doneBy || "",
+          doneAt: s.doneAt ? new Date(s.doneAt).toISOString() : ""
+        };
+      })
+    };
+
+    try {
+      // Apps Script en mode no-cors car redirection
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      setSent(true);
+    } catch (e) {
+      setError(`Erreur: ${e.message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="app">
+      <div className="header">
+        <div className="header-row">
+          <div>
+            <h1>Récap dispatch</h1>
+            <div className="sub">{supplier}</div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn" onClick={onClose}>← Retour</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="recap-section">
+        <div className="recap-card">
+          <h3>📊 Avancement</h3>
+          <div className="recap-stat">
+            <span className="label">Produits totaux</span>
+            <span className="value">{analysis.total}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Dispatchés</span>
+            <span className="value">{analysis.done}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Non traités</span>
+            <span className="value" style={{color: analysis.notDone.length > 0 ? "#d32f2f" : "#1a4d2e"}}>
+              {analysis.notDone.length}
+            </span>
+          </div>
+        </div>
+
+        <div className="recap-card">
+          <h3>⏱ Temps</h3>
+          <div className="recap-stat">
+            <span className="label">Début</span>
+            <span className="value">{fmtTime(analysis.startedAt)}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Fin</span>
+            <span className="value">{fmtTime(analysis.endedAt)}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Durée totale</span>
+            <span className="value">{fmtDuration(analysis.duration)}</span>
+          </div>
+          {analysis.done > 0 && analysis.duration > 0 && (
+            <div className="recap-stat">
+              <span className="label">Cadence</span>
+              <span className="value">
+                {(analysis.done / (analysis.duration / 60000)).toFixed(1)} produits/min
+              </span>
+            </div>
+          )}
+        </div>
+
+        {Object.keys(analysis.byOp).length > 0 && (
+          <div className="recap-card">
+            <h3>👥 Par opérateur</h3>
+            {Object.entries(analysis.byOp)
+              .sort((a,b) => b[1] - a[1])
+              .map(([name, count]) => (
+                <div className="recap-stat" key={name}>
+                  <span className="label">{name}</span>
+                  <span className="value">{count} produits</span>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {analysis.notDone.length > 0 && (
+          <div className="recap-card">
+            <h3>⚠️ Non traités ({analysis.notDone.length})</h3>
+            {analysis.notDone.map(p => (
+              <div className="anomaly-item" key={p._pkey}>
+                <div className="product">{p.designation}</div>
+                <div className="detail">
+                  Reçu: {p.recue} • ROB {p.rob} / TOL {p.tol} / PDP {p.pdp}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {analysis.adjusted.length > 0 && (
+          <div className="recap-card">
+            <h3>✎ Quantités ajustées ({analysis.adjusted.length})</h3>
+            {analysis.adjusted.map(p => {
+              const s = state[p._pkey];
+              return (
+                <div className="anomaly-item" key={p._pkey}>
+                  <div className="product">{p.designation}</div>
+                  <div className="detail">
+                    Prévu: {p.rob}/{p.tol}/{p.pdp} →
+                    Réel: {s.qtyRob ?? p.rob}/{s.qtyTol ?? p.tol}/{s.qtyPdp ?? p.pdp}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="recap-card">
+          <h3>📤 Envoyer le récap</h3>
+          {!sent && (
+            <button
+              className="btn-primary"
+              onClick={sendRecap}
+              disabled={sending}
+            >
+              {sending ? "Envoi en cours..." : "Envoyer au Google Sheet"}
+            </button>
+          )}
+          {sent && (
+            <div style={{padding: 12, background: "#e8f5e9", borderRadius: 8, color: "#1a4d2e", fontWeight: 600, textAlign: "center"}}>
+              ✓ Envoyé !
+            </div>
+          )}
+          {error && (
+            <div style={{padding: 12, background: "#ffebee", borderRadius: 8, color: "#c62828", fontSize: 13, marginTop: 8}}>
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="recap-card">
+          <button
+            className="btn-secondary"
+            onClick={onReset}
+            style={{background: "#ffebee", color: "#c62828"}}
+          >
+            🗑 Réinitialiser et nouveau dispatch
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   APP ROOT
+   ========================================================================= */
+
+function App() {
+  const [operator, setOperator] = useState(localStorage.getItem("dispatch_operator") || "");
+  const [sessionId, setSessionId] = useState(localStorage.getItem("dispatch_sessionId") || "");
+  const [supplier, setSupplier] = useState(localStorage.getItem("dispatch_supplier") || "");
+  const [products, setProducts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dispatch_products") || "[]"); }
+    catch { return []; }
+  });
+  const [view, setView] = useState("dispatch"); // dispatch | recap
+  const [recapData, setRecapData] = useState(null);
+
+  // Persistance locale du contexte
+  useEffect(() => {
+    if (sessionId) localStorage.setItem("dispatch_sessionId", sessionId);
+    if (supplier) localStorage.setItem("dispatch_supplier", supplier);
+    if (products.length > 0) localStorage.setItem("dispatch_products", JSON.stringify(products));
+  }, [sessionId, supplier, products]);
+
+  // Init session quand on upload un nouveau fichier
+  const handleSessionStart = (sid, sup, prods) => {
+    setSessionId(sid);
+    setSupplier(sup);
+    setProducts(prods);
+    setView("dispatch");
+
+    // Push meta dans Firebase
+    if (firebaseReady) {
+      db.ref(`dispatch/${sid}/meta`).set({
+        supplier: sup,
+        startedAt: Date.now(),
+        products: prods,
+        createdBy: operator
+      });
+    }
+  };
+
+  // Rejoindre une session existante : charger les produits depuis Firebase
+  const handleJoinSession = (sid) => {
+    if (!firebaseReady) return;
+    db.ref(`dispatch/${sid}/meta`).once("value").then(snap => {
+      const m = snap.val();
+      if (m) {
+        setSessionId(sid);
+        setSupplier(m.supplier || "Fournisseur");
+        setProducts(m.products || []);
+        setView("dispatch");
+      }
+    });
+  };
+
+  const handleFinish = (state, productsWithKeys) => {
+    setRecapData({ state, products: productsWithKeys });
+    setView("recap");
+  };
+
+  const handleReset = () => {
+    if (!confirm("Effacer ce dispatch et tout recommencer ?")) return;
+    localStorage.removeItem("dispatch_sessionId");
+    localStorage.removeItem("dispatch_supplier");
+    localStorage.removeItem("dispatch_products");
+    setSessionId("");
+    setSupplier("");
+    setProducts([]);
+    setRecapData(null);
+    setView("dispatch");
+  };
+
+  if (!operator) {
+    return <LoginScreen onLogin={setOperator} />;
+  }
+
+  if (!sessionId || products.length === 0) {
+    return (
+      <UploadScreen
+        operator={operator}
+        onSessionStart={handleSessionStart}
+        onJoinSession={handleJoinSession}
+      />
+    );
+  }
+
+  if (view === "recap" && recapData) {
+    return (
+      <RecapScreen
+        sessionId={sessionId}
+        operator={operator}
+        supplier={supplier}
+        products={recapData.products}
+        state={recapData.state}
+        onClose={() => setView("dispatch")}
+        onReset={handleReset}
+      />
+    );
+  }
+
+  return (
+    <DispatchScreen
+      sessionId={sessionId}
+      operator={operator}
+      supplier={supplier}
+      products={products}
+      onFinish={handleFinish}
+      onBack={handleReset}
+    />
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
