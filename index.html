@@ -1,0 +1,2258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Kelbongoo - Dispatch Palette</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<!-- Firebase (compat builds, comme l'app prep) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f5f7;
+    color: #1a1a1a;
+    overscroll-behavior: none;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; }
+  input { font-family: inherit; }
+
+  .app { max-width: 900px; margin: 0 auto; min-height: 100vh; background: #fff; }
+
+  /* Header */
+  .header {
+    position: sticky; top: 0; z-index: 10;
+    background: #1a4d2e;
+    color: #fff;
+    padding: 12px 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .3px; }
+  .header .sub { font-size: 12px; opacity: .85; margin-top: 2px; }
+  .header-actions { display: flex; gap: 8px; }
+  .header-btn {
+    background: rgba(255,255,255,.15);
+    color: #fff; padding: 6px 12px; border-radius: 6px;
+    font-size: 13px; font-weight: 600;
+  }
+  .header-btn:active { background: rgba(255,255,255,.3); }
+
+  /* Login / Upload screens */
+  .screen-center {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  .logo {
+    font-size: 28px; font-weight: 800; color: #1a4d2e;
+    margin-bottom: 8px; letter-spacing: -.5px;
+  }
+  .tag { color: #666; font-size: 14px; margin-bottom: 32px; }
+  .card {
+    width: 100%; max-width: 360px;
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    padding: 24px;
+  }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #555; }
+  .field input, .field select {
+    width: 100%; padding: 12px; font-size: 16px;
+    border: 1.5px solid #ddd; border-radius: 8px; background: #fff;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: #1a4d2e; }
+  .btn-primary {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+    background: #1a4d2e; color: #fff; border-radius: 8px;
+    transition: background .15s;
+  }
+  .btn-primary:active { background: #0d3d20; }
+  .btn-primary:disabled { background: #aaa; }
+  .btn-secondary {
+    width: 100%; padding: 12px; font-size: 14px; font-weight: 600;
+    background: #f0f0f0; color: #333; border-radius: 8px;
+    margin-top: 8px;
+  }
+
+  /* Upload */
+  .upload-zone {
+    border: 2px dashed #1a4d2e; border-radius: 12px;
+    padding: 32px 16px; text-align: center;
+    background: #f4f9f5; cursor: pointer;
+  }
+  .upload-zone:active { background: #e6f1ea; }
+  .upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
+  .upload-zone .label { font-weight: 600; color: #1a4d2e; }
+  .upload-zone .hint { font-size: 12px; color: #666; margin-top: 4px; }
+
+  /* Progress bar */
+  .progress-bar {
+    background: #e6e8ec; height: 6px; border-radius: 3px; overflow: hidden;
+    margin-top: 8px;
+  }
+  .progress-fill {
+    height: 100%; background: #4caf50;
+    transition: width .3s ease;
+  }
+  .progress-text {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: #666; margin-top: 4px;
+  }
+
+  /* Product list */
+  .product-list { padding: 8px; padding-bottom: 100px; }
+  .product-card {
+    background: #fff; border: 1.5px solid #e6e8ec;
+    border-radius: 10px; padding: 12px; margin-bottom: 8px;
+    transition: all .2s;
+  }
+  .product-card.locked {
+    background: #fff8e1; border-color: #ffb300;
+  }
+  .product-card.done {
+    background: #e8f5e9; border-color: #4caf50; opacity: .7;
+  }
+  .product-card.done .designation { text-decoration: line-through; color: #555; }
+
+  .designation {
+    font-size: 14px; font-weight: 600;
+    line-height: 1.3; margin-bottom: 6px;
+  }
+  .product-meta {
+    font-size: 11px; color: #777; margin-bottom: 8px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .product-meta .article { font-family: monospace; }
+  .product-meta .recu { color: #1a4d2e; font-weight: 600; }
+
+  .dest-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px; margin-bottom: 8px;
+  }
+  .dest-cell {
+    background: #f4f5f7; border-radius: 6px;
+    padding: 8px 4px; text-align: center;
+  }
+  .dest-cell .name { font-size: 10px; font-weight: 700; color: #666; letter-spacing: .5px; }
+  .dest-cell .qty { font-size: 20px; font-weight: 800; color: #1a4d2e; margin-top: 2px; }
+  .dest-cell .qty.zero { color: #ccc; }
+
+  .actions-row { display: flex; gap: 6px; }
+  .btn-validate {
+    flex: 1; padding: 12px; font-size: 14px; font-weight: 700;
+    background: #1a4d2e; color: #fff; border-radius: 8px;
+  }
+  .btn-validate:active { background: #0d3d20; }
+  .btn-edit {
+    padding: 12px 14px; font-size: 14px;
+    background: #f0f0f0; color: #555; border-radius: 8px;
+  }
+  .btn-undo {
+    flex: 1; padding: 10px; font-size: 13px; font-weight: 600;
+    background: #fff; color: #4caf50; border: 1.5px solid #4caf50; border-radius: 8px;
+  }
+
+  .lock-badge {
+    background: #ffb300; color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 8px; border-radius: 10px;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .done-badge {
+    background: #4caf50; color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 8px; border-radius: 10px;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .timestamp {
+    font-size: 10px; color: #888; font-weight: 500;
+  }
+
+  /* Search bar */
+  .search-bar {
+    position: sticky; top: 64px; z-index: 5;
+    background: #fff; padding: 8px 12px;
+    border-bottom: 1px solid #e6e8ec;
+  }
+  .search-bar input {
+    width: 100%; padding: 10px 12px; font-size: 15px;
+    border: 1.5px solid #ddd; border-radius: 8px;
+  }
+  .search-bar input:focus { outline: none; border-color: #1a4d2e; }
+
+  /* Tabs */
+  .tabs-bar {
+    display: flex;
+    background: #fff;
+    border-bottom: 1px solid #e6e8ec;
+    position: sticky; top: 64px; z-index: 6;
+  }
+  .tab {
+    flex: 1;
+    padding: 12px 8px;
+    background: transparent;
+    color: #777;
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    transition: all .15s;
+  }
+  .tab.active {
+    color: #1a4d2e;
+    border-bottom-color: #1a4d2e;
+    background: #f4f9f5;
+  }
+  .tab:active { background: #e6f1ea; }
+
+  /* Mode scan */
+  .scan-mode {
+    padding: 16px;
+    padding-bottom: 100px;
+    min-height: calc(100vh - 200px);
+  }
+  .scan-search-wrap {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .scan-search-input {
+    width: 100%;
+    padding: 20px 50px 20px 20px;
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    border: 3px solid #1a4d2e;
+    border-radius: 16px;
+    background: #fff;
+    text-transform: lowercase;
+    letter-spacing: 2px;
+  }
+  .scan-search-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(26, 77, 46, 0.15);
+  }
+  .scan-search-input::placeholder {
+    color: #ccc;
+    font-weight: 500;
+    letter-spacing: normal;
+    font-size: 18px;
+  }
+  .scan-clear {
+    position: absolute;
+    right: 12px; top: 50%;
+    transform: translateY(-50%);
+    width: 36px; height: 36px;
+    background: #f0f0f0;
+    border-radius: 50%;
+    font-size: 16px;
+    color: #555;
+  }
+  .scan-hint {
+    text-align: center;
+    padding: 40px 20px;
+    color: #555;
+  }
+  .scan-results {
+    /* Cartes plus grandes en mode scan */
+  }
+  .scan-results .product-card {
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .scan-results .designation {
+    font-size: 16px;
+  }
+  .scan-results .dest-cell .qty {
+    font-size: 24px;
+  }
+  .scan-results .btn-validate {
+    padding: 16px;
+    font-size: 16px;
+  }
+
+  /* Bottom action bar */
+  .bottom-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; border-top: 1px solid #e6e8ec;
+    padding: 12px 16px; box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+    z-index: 10;
+  }
+  .bottom-bar .stats {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: #666; margin-bottom: 8px;
+  }
+  .btn-finish {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+    background: #4caf50; color: #fff; border-radius: 8px;
+  }
+  .btn-finish:disabled { background: #aaa; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; padding: 16px;
+  }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 20px;
+    width: 100%; max-width: 360px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 12px 0; font-size: 16px; }
+  .modal .designation-modal { font-size: 13px; color: #555; margin-bottom: 16px; }
+  .edit-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px; margin-bottom: 16px;
+  }
+  .edit-cell label { font-size: 11px; font-weight: 700; color: #666; }
+  .edit-cell input {
+    width: 100%; padding: 10px; font-size: 18px; font-weight: 700;
+    text-align: center; border: 1.5px solid #ddd; border-radius: 6px;
+    margin-top: 4px;
+  }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-actions button { flex: 1; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+  .btn-cancel { background: #f0f0f0; color: #555; }
+  .btn-confirm { background: #1a4d2e; color: #fff; }
+
+  /* Recap */
+  .recap-section { padding: 16px; padding-bottom: 100px; }
+  .recap-card {
+    background: #fff; border-radius: 12px;
+    padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.05);
+  }
+  .recap-card h3 { margin: 0 0 12px 0; font-size: 15px; }
+  .recap-stat {
+    display: flex; justify-content: space-between;
+    padding: 6px 0; border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+  }
+  .recap-stat:last-child { border-bottom: none; }
+  .recap-stat .label { color: #666; }
+  .recap-stat .value { font-weight: 700; color: #1a4d2e; }
+
+  .anomaly-item {
+    padding: 10px; border-radius: 6px;
+    background: #fff3e0; border-left: 3px solid #ff9800;
+    font-size: 12px; margin-bottom: 6px;
+  }
+  .anomaly-item .product { font-weight: 600; }
+  .anomaly-item .detail { color: #666; margin-top: 2px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 10px 16px;
+    border-radius: 8px; font-size: 13px; z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  }
+
+  /* Connection status */
+  .conn-status {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(255,255,255,.2);
+  }
+  .conn-status.offline { background: #d32f2f; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* =========================================================================
+   CONFIGURATION
+   ========================================================================= */
+
+// Firebase config - projet kelbongoo-prep (app Dispatch)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDtcoRoknYM4JrJJfcuhpnVMeS-OurwYdU",
+  authDomain: "kelbongoo-prep.firebaseapp.com",
+  databaseURL: "https://kelbongoo-prep-default-rtdb.firebaseio.com",
+  projectId: "kelbongoo-prep",
+  storageBucket: "kelbongoo-prep.firebasestorage.app",
+  messagingSenderId: "596701505006",
+  appId: "1:596701505006:web:3f2f8d3f0f43ca828e5aff"
+};
+
+// URL Apps Script pour envoi du récap (Kelbongoo Distribution Proxy)
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj8BOPRY7V_Ni_0a-6YmNA-1HyRAcf0QXAL1FMy04Xnp1W4Am-cNuR4poQOHzu4VCL4Q/exec";
+
+// Durée de verrouillage d'une ligne (ms) - 30s sans renouvellement = auto-déverrouillage
+const LOCK_DURATION_MS = 30000;
+const LOCK_REFRESH_MS = 10000;
+
+// Liste des opérateurs ayant accès au mode Admin (case-insensitive)
+const ADMIN_NAMES = ["henry", "raimbaud"];
+const isAdmin = (name) => ADMIN_NAMES.includes((name||"").toLowerCase().trim());
+
+// Init Firebase
+let db = null;
+let firebaseReady = false;
+try {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.database();
+  firebaseReady = true;
+} catch(e) { console.error("Firebase init failed", e); }
+
+/* =========================================================================
+   HELPERS
+   ========================================================================= */
+
+const fmtTime = (ts) => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+};
+
+const fmtDuration = (ms) => {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h${(m%60).toString().padStart(2,"0")}`;
+  if (m > 0) return `${m}min ${s%60}s`;
+  return `${s}s`;
+};
+
+const stripAccents = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+// Identifiant stable pour une ligne (basé sur le code article + index pour les cas sans code)
+const productKey = (p, idx) => {
+  const code = (p.article || "").toString().trim();
+  if (code) return `a_${code}`;
+  return `l_${idx}`;
+};
+
+/* =========================================================================
+   EXCEL PARSING
+   ========================================================================= */
+
+// Normalise un nom de colonne pour le matching (sans accents, lowercase, trim)
+const normCol = (s) => stripAccents((s||"").toString()).toLowerCase().trim();
+
+// Mapping des codes magasin G5 vers nos noms
+// Magasin 01 = ROB, Magasin 03 = TOL, Magasin 98 = PDP
+const G5_STORE_MAP = {
+  "01": "rob",
+  "03": "tol",
+  "98": "pdp"
+};
+
+// Parse une cellule G5 qui peut être au format "07-1-59 ||| 36.000000"
+// Retourne le nombre après les ||| ou simplement la valeur si pas de ||| .
+const parseG5Cell = (v) => {
+  if (v === "" || v === null || v === undefined) return 0;
+  const s = v.toString().trim();
+  // Format G5 : "XX-Y-ZZZ ||| nombre.000000"
+  // On peut avoir plusieurs ||| (ex: "98 ||| 98-1-0000000008 ||| 36.000000")
+  // → on prend toujours ce qui est après le DERNIER |||
+  const lastSep = s.lastIndexOf("|||");
+  let numStr = lastSep >= 0 ? s.substring(lastSep + 3).trim() : s;
+  // Format "12u = 2.798000" (autre ancien format) → 12
+  const um = numStr.match(/^(\d+)\s*u/);
+  if (um) return parseInt(um[1], 10);
+  const n = parseFloat(numStr);
+  return isNaN(n) ? 0 : Math.round(n); // arrondit (36.000000 -> 36)
+};
+
+// Détecte la structure du fichier en cherchant la ligne d'en-têtes
+function parseExcelFile(workbook) {
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+  // Cherche la ligne d'en-têtes
+  let headerIdx = -1;
+  let headers = null;
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = rows[i].map(c => normCol(c));
+    const hasArt = row.some(c => c === "article");
+    const hasDesig = row.some(c => c.includes("designation"));
+    const hasDest = row.some(c => ["rob","tol","pdp"].includes(c) || c.startsWith("magasin"));
+    if ((hasArt && hasDesig) || (hasDesig && hasDest)) {
+      headerIdx = i;
+      headers = rows[i];
+      break;
+    }
+  }
+  if (headerIdx === -1) {
+    throw new Error("Impossible de trouver les en-têtes (Article / désignation / ROB-TOL-PDP ou Magasin 01-03-98) dans le fichier.");
+  }
+
+  // Map des colonnes - on supporte deux formats:
+  // Format A (legacy): colonnes "ROB", "TOL", "PDP"
+  // Format B (G5):     colonnes "Magasin 01", "Magasin 03", "Magasin 98"
+  const colMap = {};
+  let isG5Format = false;
+  headers.forEach((h, idx) => {
+    const n = normCol(h);
+    if (n === "article") colMap.article = idx;
+    else if (n.includes("designation")) colMap.designation = idx;
+    else if (n.includes("cmd")) colMap.cmd = idx;
+    else if (n.includes("recept")) colMap.recue = idx;
+    else if (n === "rob") colMap.rob = idx;
+    else if (n === "tol") colMap.tol = idx;
+    else if (n === "pdp") colMap.pdp = idx;
+    // Format G5: "Magasin 01", "Magasin 03", "Magasin 98"
+    else if (n.startsWith("magasin")) {
+      const code = n.replace("magasin", "").trim();
+      const dest = G5_STORE_MAP[code];
+      if (dest) {
+        colMap[dest] = idx;
+        isG5Format = true;
+      }
+      // Magasin 05 et autres : on ignore
+    }
+  });
+
+  // Parse les lignes produit
+  const products = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every(c => c === "" || c === null || c === undefined)) continue;
+
+    const designation = (row[colMap.designation] || "").toString().trim();
+    if (!designation) continue;
+
+    // Parser : G5 si on a détecté le format, sinon parser simple
+    const parse = isG5Format ? parseG5Cell : (v) => {
+      if (v === "" || v === null || v === undefined) return 0;
+      const s = v.toString().trim();
+      const m = s.match(/^(\d+)\s*u/);
+      if (m) return parseInt(m[1], 10);
+      const n = parseFloat(s);
+      return isNaN(n) ? 0 : n;
+    };
+
+    products.push({
+      article: (row[colMap.article] || "").toString().trim(),
+      designation,
+      cmd: parse(row[colMap.cmd]),
+      recue: parse(row[colMap.recue]),
+      rob: colMap.rob !== undefined ? parse(row[colMap.rob]) : 0,
+      tol: colMap.tol !== undefined ? parse(row[colMap.tol]) : 0,
+      pdp: colMap.pdp !== undefined ? parse(row[colMap.pdp]) : 0
+    });
+  }
+
+  return products;
+}
+
+/* =========================================================================
+   FIREBASE / STATE SYNC
+   ========================================================================= */
+
+// Une session = un dispatch en cours, identifiée par un sessionId
+// Structure dans Firebase:
+//   /dispatch/{sessionId}/meta : { supplier, startedAt, operators: [...], products: [...] }
+//   /dispatch/{sessionId}/state/{productKey} : { done, doneBy, doneAt, lockedBy, lockedAt, qtyRob, qtyTol, qtyPdp }
+
+function useFirebaseSession(sessionId, operatorName) {
+  const [state, setState] = useState({});
+  const [meta, setMeta] = useState(null);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!firebaseReady || !sessionId) return;
+
+    const stateRef = db.ref(`dispatch/${sessionId}/state`);
+    const metaRef = db.ref(`dispatch/${sessionId}/meta`);
+    const connectedRef = db.ref(".info/connected");
+
+    const onState = (snap) => setState(snap.val() || {});
+    const onMeta = (snap) => setMeta(snap.val() || null);
+    const onConn = (snap) => setConnected(!!snap.val());
+
+    stateRef.on("value", onState);
+    metaRef.on("value", onMeta);
+    connectedRef.on("value", onConn);
+
+    return () => {
+      stateRef.off("value", onState);
+      metaRef.off("value", onMeta);
+      connectedRef.off("value", onConn);
+    };
+  }, [sessionId]);
+
+  // Mise à jour locale (fallback si pas Firebase)
+  const updateLocal = useCallback((key, patch) => {
+    setState(prev => ({ ...prev, [key]: { ...(prev[key] || {}), ...patch } }));
+  }, []);
+
+  const lockRow = useCallback((key) => {
+    const patch = { lockedBy: operatorName, lockedAt: Date.now() };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, operatorName, updateLocal]);
+
+  const unlockRow = useCallback((key) => {
+    const patch = { lockedBy: null, lockedAt: null };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, updateLocal]);
+
+  const validateRow = useCallback((key, qtys) => {
+    const patch = {
+      done: true,
+      doneBy: operatorName,
+      doneAt: Date.now(),
+      lockedBy: null,
+      lockedAt: null,
+      ...(qtys || {})
+    };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, operatorName, updateLocal]);
+
+  const undoRow = useCallback((key) => {
+    const patch = { done: false, doneBy: null, doneAt: null };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, updateLocal]);
+
+  const initSession = useCallback((supplier, products) => {
+    const metaData = {
+      supplier,
+      startedAt: Date.now(),
+      products,
+    };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/meta`).set(metaData);
+    } else {
+      setMeta(metaData);
+    }
+  }, [sessionId]);
+
+  return { state, meta, connected: firebaseReady ? connected : true, lockRow, unlockRow, validateRow, undoRow, initSession };
+}
+
+/* =========================================================================
+   COMPOSANTS
+   ========================================================================= */
+
+function LoginScreen({ onLogin }) {
+  const [name, setName] = useState(localStorage.getItem("dispatch_operator") || "");
+
+  const submit = () => {
+    if (!name.trim()) return;
+    localStorage.setItem("dispatch_operator", name.trim());
+    onLogin(name.trim());
+  };
+
+  return (
+    <div className="screen-center">
+      <div className="logo">Kelbongoo</div>
+      <div className="tag">Dispatch Palette</div>
+      <div className="card">
+        <div className="field">
+          <label>Ton prénom</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: Marie"
+            autoFocus
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
+        </div>
+        <button className="btn-primary" onClick={submit} disabled={!name.trim()}>
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin }) {
+  const [error, setError] = useState("");
+  const [supplierName, setSupplierName] = useState("");
+  const [pendingFile, setPendingFile] = useState(null);
+  const fileRef = useRef(null);
+
+  // Vérifie si une session est déjà active (autre opérateur a déjà uploadé)
+  const [activeSessions, setActiveSessions] = useState([]);
+  useEffect(() => {
+    if (!firebaseReady) return;
+    const ref = db.ref("dispatch");
+    const handler = (snap) => {
+      const all = snap.val() || {};
+      const recent = [];
+      const now = Date.now();
+      Object.entries(all).forEach(([sid, s]) => {
+        if (s.meta && s.meta.startedAt && (now - s.meta.startedAt) < 8 * 3600 * 1000) {
+          // Sessions des 8 dernières heures
+          const total = (s.meta.products || []).length;
+          const done = Object.values(s.state || {}).filter(x => x && x.done).length;
+          if (done < total) {
+            recent.push({ id: sid, supplier: s.meta.supplier, startedAt: s.meta.startedAt, total, done });
+          }
+        }
+      });
+      recent.sort((a,b) => b.startedAt - a.startedAt);
+      setActiveSessions(recent);
+    };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, []);
+
+  const handleFileSelected = (file) => {
+    if (!file) return;
+    if (!supplierName.trim()) {
+      setError("Indique d'abord le nom du fournisseur avant de charger le fichier.");
+      // Garde le fichier en mémoire pour quand le nom sera entré
+      setPendingFile(file);
+      return;
+    }
+    processFile(file, supplierName.trim());
+  };
+
+  const processFile = async (file, supplier) => {
+    setError("");
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const products = parseExcelFile(wb);
+      if (products.length === 0) {
+        setError("Aucun produit trouvé dans le fichier.");
+        return;
+      }
+      const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
+      onSessionStart(sessionId, supplier, products);
+    } catch (e) {
+      setError(`Erreur de lecture: ${e.message}`);
+    }
+  };
+
+  // Si le user a maintenant entré le nom et qu'on avait un fichier en attente
+  const handleSupplierConfirm = () => {
+    if (!supplierName.trim()) {
+      setError("Le nom du fournisseur est obligatoire.");
+      return;
+    }
+    if (pendingFile) {
+      processFile(pendingFile, supplierName.trim());
+      setPendingFile(null);
+    } else {
+      fileRef.current?.click();
+    }
+  };
+
+  return (
+    <div className="screen-center">
+      <div className="logo">Kelbongoo</div>
+      <div className="tag">Bonjour {operator} 👋</div>
+
+      <div className="card">
+        <h3 style={{margin: "0 0 12px 0", fontSize: 15}}>Démarrer un nouveau dispatch</h3>
+
+        <div className="field">
+          <label>Nom du fournisseur *</label>
+          <input
+            type="text"
+            value={supplierName}
+            onChange={(e) => { setSupplierName(e.target.value); setError(""); }}
+            placeholder="Ex: SYMBIOSE, GABORIT, TERRE D'OC..."
+            style={{textTransform: "uppercase"}}
+          />
+        </div>
+
+        <div
+          className="upload-zone"
+          onClick={() => {
+            if (!supplierName.trim()) {
+              setError("⚠️ Saisis d'abord le nom du fournisseur");
+              return;
+            }
+            fileRef.current?.click();
+          }}
+          style={{opacity: supplierName.trim() ? 1 : 0.5}}
+        >
+          <div className="icon">📥</div>
+          <div className="label">Charger le fichier Excel</div>
+          <div className="hint">.xlsx ou .xls</div>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{display: "none"}}
+          onChange={(e) => handleFileSelected(e.target.files[0])}
+        />
+        {error && <div style={{color: "#d32f2f", fontSize: 13, marginTop: 12}}>{error}</div>}
+      </div>
+
+      {activeSessions.length > 0 && (
+        <div className="card" style={{marginTop: 16}}>
+          <h3 style={{margin: "0 0 12px 0", fontSize: 15}}>Rejoindre un dispatch en cours</h3>
+          {activeSessions.map(s => (
+            <button
+              key={s.id}
+              className="btn-secondary"
+              style={{textAlign: "left", padding: 14, marginBottom: 6}}
+              onClick={() => onJoinSession(s.id)}
+            >
+              <div style={{fontWeight: 700, marginBottom: 2}}>{s.supplier}</div>
+              <div style={{fontSize: 11, color: "#666"}}>
+                Démarré à {fmtTime(s.startedAt)} • {s.done}/{s.total} produits faits
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isAdmin(operator) && (
+        <div style={{marginTop: 16, width: "100%", maxWidth: 360}}>
+          <button
+            className="btn-secondary"
+            onClick={onOpenAdmin}
+            style={{background: "#1a4d2e", color: "#fff", fontWeight: 700, padding: 14}}
+          >
+            🔐 Mode Admin
+          </button>
+        </div>
+      )}
+
+      {!firebaseReady && (
+        <div style={{fontSize: 11, color: "#999", marginTop: 16, textAlign: "center", maxWidth: 360}}>
+          ⚠️ Firebase non configuré. Mode local uniquement (pas de partage temps réel).
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductCard({ product, pkey, status, operator, onLock, onValidate, onUndo, onEdit }) {
+  const isLocked = status.lockedBy && status.lockedBy !== operator;
+  const lockExpired = status.lockedAt && (Date.now() - status.lockedAt) > LOCK_DURATION_MS;
+  const reallyLocked = isLocked && !lockExpired;
+  const isDone = status.done;
+  const isMine = status.lockedBy === operator;
+
+  // Quantités (effectives, peuvent avoir été modifiées)
+  const qtyRob = status.qtyRob !== undefined ? status.qtyRob : product.rob;
+  const qtyTol = status.qtyTol !== undefined ? status.qtyTol : product.tol;
+  const qtyPdp = status.qtyPdp !== undefined ? status.qtyPdp : product.pdp;
+
+  const cls = `product-card ${isDone ? "done" : ""} ${reallyLocked ? "locked" : ""}`;
+
+  return (
+    <div className={cls}>
+      {reallyLocked && (
+        <div className="lock-badge">🔒 {status.lockedBy} est dessus</div>
+      )}
+      {isDone && (
+        <div className="done-badge">
+          ✓ {status.doneBy} • {fmtTime(status.doneAt)}
+        </div>
+      )}
+
+      <div className="designation">{product.designation}</div>
+      <div className="product-meta">
+        {product.article && <span className="article">{product.article}</span>}
+        <span className="recu">Reçu: {product.recue}</span>
+      </div>
+
+      <div className="dest-row">
+        <div className="dest-cell">
+          <div className="name">ROB</div>
+          <div className={`qty ${qtyRob === 0 ? "zero" : ""}`}>{qtyRob}</div>
+        </div>
+        <div className="dest-cell">
+          <div className="name">TOL</div>
+          <div className={`qty ${qtyTol === 0 ? "zero" : ""}`}>{qtyTol}</div>
+        </div>
+        <div className="dest-cell">
+          <div className="name">PDP</div>
+          <div className={`qty ${qtyPdp === 0 ? "zero" : ""}`}>{qtyPdp}</div>
+        </div>
+      </div>
+
+      {!isDone && !reallyLocked && (
+        <div className="actions-row">
+          <button
+            className="btn-validate"
+            onClick={() => onValidate(pkey, { qtyRob, qtyTol, qtyPdp })}
+          >
+            ✓ Dispatché
+          </button>
+          <button className="btn-edit" onClick={() => onEdit(pkey)}>
+            ✎
+          </button>
+        </div>
+      )}
+
+      {isDone && (
+        <div className="actions-row">
+          <button className="btn-undo" onClick={() => onUndo(pkey)}>
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {reallyLocked && (
+        <div style={{fontSize: 12, color: "#888", textAlign: "center", padding: "8px 0"}}>
+          En cours par {status.lockedBy}...
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditModal({ product, status, onSave, onClose }) {
+  const [rob, setRob] = useState(status.qtyRob !== undefined ? status.qtyRob : product.rob);
+  const [tol, setTol] = useState(status.qtyTol !== undefined ? status.qtyTol : product.tol);
+  const [pdp, setPdp] = useState(status.qtyPdp !== undefined ? status.qtyPdp : product.pdp);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Ajuster les quantités</h3>
+        <div className="designation-modal">{product.designation}</div>
+        <div className="edit-grid">
+          <div className="edit-cell">
+            <label>ROB</label>
+            <input type="number" value={rob} onChange={(e) => setRob(parseInt(e.target.value)||0)} min="0" />
+          </div>
+          <div className="edit-cell">
+            <label>TOL</label>
+            <input type="number" value={tol} onChange={(e) => setTol(parseInt(e.target.value)||0)} min="0" />
+          </div>
+          <div className="edit-cell">
+            <label>PDP</label>
+            <input type="number" value={pdp} onChange={(e) => setPdp(parseInt(e.target.value)||0)} min="0" />
+          </div>
+        </div>
+        <div style={{fontSize: 11, color: "#888", marginBottom: 12, textAlign: "center"}}>
+          Total: {rob + tol + pdp} / Reçu: {product.recue}
+          {(rob + tol + pdp) !== product.recue && (
+            <span style={{color: "#d32f2f", fontWeight: 700}}> ⚠️ écart</span>
+          )}
+        </div>
+        <div className="modal-actions">
+          <button className="btn-cancel" onClick={onClose}>Annuler</button>
+          <button className="btn-confirm" onClick={() => onSave({ qtyRob: rob, qtyTol: tol, qtyPdp: pdp })}>
+            Valider
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onBack }) {
+  const { state, meta, connected, lockRow, unlockRow, validateRow, undoRow } = useFirebaseSession(sessionId, operator);
+  const [search, setSearch] = useState("");
+  const [editingKey, setEditingKey] = useState(null);
+  const [toast, setToast] = useState("");
+  const [viewMode, setViewMode] = useState(localStorage.getItem("dispatch_view_mode") || "list"); // "list" | "scan"
+  const [showDone, setShowDone] = useState(false); // onglet Dispatchés
+  const searchInputRef = useRef(null);
+
+  // Sauvegarde le mode choisi
+  useEffect(() => {
+    localStorage.setItem("dispatch_view_mode", viewMode);
+  }, [viewMode]);
+
+  // Renouvelle le lock toutes les 10s sur les lignes que je tiens
+  useEffect(() => {
+    const t = setInterval(() => {
+      Object.entries(state).forEach(([k, v]) => {
+        if (v && v.lockedBy === operator && !v.done) {
+          lockRow(k);
+        }
+      });
+    }, LOCK_REFRESH_MS);
+    return () => clearInterval(t);
+  }, [state, operator, lockRow]);
+
+  // Tri alphabétique
+  const sortedProducts = useMemo(() => {
+    return products
+      .map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }))
+      .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
+  }, [products]);
+
+  // Sépare les produits dispatchés des non dispatchés
+  const { notDoneProducts, doneProducts } = useMemo(() => {
+    const notDone = [];
+    const done = [];
+    sortedProducts.forEach(p => {
+      if (state[p._pkey]?.done) done.push(p);
+      else notDone.push(p);
+    });
+    return { notDoneProducts: notDone, doneProducts: done };
+  }, [sortedProducts, state]);
+
+  // Filtre par recherche selon l'onglet actif
+  const filtered = useMemo(() => {
+    const source = showDone ? doneProducts : notDoneProducts;
+    if (!search.trim()) return source;
+    const q = stripAccents(search.toLowerCase());
+    return source.filter(p =>
+      stripAccents(p.designation.toLowerCase()).includes(q) ||
+      (p.article || "").includes(q)
+    );
+  }, [notDoneProducts, doneProducts, showDone, search]);
+
+  const stats = useMemo(() => {
+    const total = sortedProducts.length;
+    const done = sortedProducts.filter(p => state[p._pkey]?.done).length;
+    return { total, done, remaining: total - done };
+  }, [sortedProducts, state]);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 1500);
+  };
+
+  const handleValidate = (pkey, qtys) => {
+    validateRow(pkey, qtys);
+    showToast("✓ Validé");
+  };
+
+  const handleUndo = (pkey) => {
+    undoRow(pkey);
+    showToast("↶ Annulé");
+  };
+
+  const handleEdit = (pkey) => {
+    lockRow(pkey);
+    setEditingKey(pkey);
+  };
+
+  const handleEditSave = (qtys) => {
+    if (editingKey) {
+      validateRow(editingKey, qtys);
+      showToast("✓ Ajusté et validé");
+    }
+    setEditingKey(null);
+  };
+
+  const handleEditCancel = () => {
+    if (editingKey) unlockRow(editingKey);
+    setEditingKey(null);
+  };
+
+  const editingProduct = editingKey ? sortedProducts.find(p => p._pkey === editingKey) : null;
+
+  // Quand on est en mode scan et qu'on valide, on vide la recherche pour le prochain produit
+  const handleValidateScan = (pkey, qtys) => {
+    handleValidate(pkey, qtys);
+    if (viewMode === "scan") {
+      setSearch("");
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+  };
+
+  return (
+    <div className="app">
+      <div className="header">
+        <div className="header-row">
+          <div>
+            <h1>{supplier}</h1>
+            <div className="sub">
+              {operator} • <span className={`conn-status ${!connected ? "offline" : ""}`}>
+                {connected ? "● en ligne" : "● hors ligne"}
+              </span>
+            </div>
+          </div>
+          <div className="header-actions">
+            <button
+              className="header-btn"
+              onClick={() => setViewMode(viewMode === "list" ? "scan" : "list")}
+              style={{background: viewMode === "scan" ? "#ffb300" : "rgba(255,255,255,.15)"}}
+            >
+              {viewMode === "scan" ? "📋 Mode liste" : "⚡ Mode scan"}
+            </button>
+            <button className="header-btn" onClick={onBack}>Retour</button>
+          </div>
+        </div>
+        <div className="progress-bar">
+          <div className="progress-fill" style={{width: `${stats.total > 0 ? (stats.done/stats.total)*100 : 0}%`}}></div>
+        </div>
+        <div className="progress-text" style={{color: "rgba(255,255,255,.85)"}}>
+          <span>{stats.done} / {stats.total} produits</span>
+          <span>{stats.remaining} restants</span>
+        </div>
+      </div>
+
+      {/* Onglets À faire / Dispatchés */}
+      <div className="tabs-bar">
+        <button
+          className={`tab ${!showDone ? "active" : ""}`}
+          onClick={() => { setShowDone(false); setSearch(""); }}
+        >
+          À faire ({notDoneProducts.length})
+        </button>
+        <button
+          className={`tab ${showDone ? "active" : ""}`}
+          onClick={() => { setShowDone(true); setSearch(""); }}
+        >
+          ✓ Dispatchés ({doneProducts.length})
+        </button>
+      </div>
+
+      {/* Mode SCAN : recherche géante centrée, peu de résultats */}
+      {viewMode === "scan" && !showDone && (
+        <div className="scan-mode">
+          <div className="scan-search-wrap">
+            <input
+              ref={searchInputRef}
+              className="scan-search-input"
+              type="text"
+              placeholder="Tape 2-3 lettres..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            {search && (
+              <button className="scan-clear" onClick={() => { setSearch(""); searchInputRef.current?.focus(); }}>
+                ✕
+              </button>
+            )}
+          </div>
+
+          {!search.trim() && (
+            <div className="scan-hint">
+              <div style={{fontSize: 40, marginBottom: 8}}>⚡</div>
+              <div style={{fontWeight: 600, marginBottom: 4}}>Mode scan rapide</div>
+              <div style={{fontSize: 13, color: "#666"}}>
+                Tape les premières lettres du produit que tu tiens dans la main
+              </div>
+              <div style={{fontSize: 12, color: "#999", marginTop: 12}}>
+                {notDoneProducts.length} produits restants
+              </div>
+            </div>
+          )}
+
+          {search.trim() && filtered.length === 0 && (
+            <div className="scan-hint">
+              <div style={{fontSize: 30, marginBottom: 8}}>🔍</div>
+              <div style={{color: "#999"}}>Aucun produit ne correspond à "<b>{search}</b>"</div>
+              <div style={{fontSize: 12, color: "#aaa", marginTop: 8}}>
+                Vérifie l'orthographe ou bascule en mode liste
+              </div>
+            </div>
+          )}
+
+          {search.trim() && filtered.length > 0 && (
+            <div className="scan-results">
+              {filtered.slice(0, 5).map(p => (
+                <ProductCard
+                  key={p._pkey}
+                  product={p}
+                  pkey={p._pkey}
+                  status={state[p._pkey] || {}}
+                  operator={operator}
+                  onLock={lockRow}
+                  onValidate={handleValidateScan}
+                  onUndo={handleUndo}
+                  onEdit={handleEdit}
+                />
+              ))}
+              {filtered.length > 5 && (
+                <div style={{textAlign: "center", color: "#999", fontSize: 12, padding: 8}}>
+                  + {filtered.length - 5} autres résultats... précise ta recherche
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mode LISTE classique ou onglet Dispatchés */}
+      {(viewMode === "list" || showDone) && (
+        <>
+          <div className="search-bar">
+            <input
+              type="text"
+              placeholder={showDone ? "🔍 Chercher dans les dispatchés..." : "🔍 Chercher un produit..."}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="product-list">
+            {filtered.length === 0 && (
+              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
+                {showDone
+                  ? (search.trim() ? "Aucun résultat" : "Aucun produit dispatché pour l'instant")
+                  : (search.trim() ? "Aucun résultat" : "🎉 Tous les produits sont dispatchés !")
+                }
+              </div>
+            )}
+            {filtered.map(p => (
+              <ProductCard
+                key={p._pkey}
+                product={p}
+                pkey={p._pkey}
+                status={state[p._pkey] || {}}
+                operator={operator}
+                onLock={lockRow}
+                onValidate={handleValidate}
+                onUndo={handleUndo}
+                onEdit={handleEdit}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="bottom-bar">
+        <div className="stats">
+          <span>Avancement: <b>{stats.done}/{stats.total}</b></span>
+          <span>{stats.total > 0 ? Math.round((stats.done/stats.total)*100) : 0}%</span>
+        </div>
+        <button
+          className="btn-finish"
+          onClick={() => onFinish(state, sortedProducts)}
+          disabled={stats.done === 0}
+        >
+          {stats.done === stats.total ? "✓ Terminer et envoyer le récap" : `Voir le récap (${stats.done} validés)`}
+        </button>
+      </div>
+
+      {editingProduct && (
+        <EditModal
+          product={editingProduct}
+          status={state[editingKey] || {}}
+          onSave={handleEditSave}
+          onClose={handleEditCancel}
+        />
+      )}
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+function RecapScreen({ sessionId, operator, supplier, products, state, onClose, onReset }) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+
+  // Analyse
+  const analysis = useMemo(() => {
+    const total = products.length;
+    const done = products.filter(p => state[p._pkey]?.done).length;
+    const notDone = products.filter(p => !state[p._pkey]?.done);
+
+    // Timestamps
+    const timestamps = products
+      .map(p => state[p._pkey]?.doneAt)
+      .filter(t => t)
+      .sort((a,b) => a - b);
+    const startedAt = timestamps[0];
+    const endedAt = timestamps[timestamps.length - 1];
+    const duration = startedAt && endedAt ? (endedAt - startedAt) : 0;
+
+    // Stats par opérateur
+    const byOp = {};
+    products.forEach(p => {
+      const s = state[p._pkey];
+      if (s?.done && s.doneBy) {
+        byOp[s.doneBy] = (byOp[s.doneBy] || 0) + 1;
+      }
+    });
+
+    // Ajustements (quantités modifiées)
+    const adjusted = products.filter(p => {
+      const s = state[p._pkey];
+      if (!s?.done) return false;
+      return (
+        (s.qtyRob !== undefined && s.qtyRob !== p.rob) ||
+        (s.qtyTol !== undefined && s.qtyTol !== p.tol) ||
+        (s.qtyPdp !== undefined && s.qtyPdp !== p.pdp)
+      );
+    });
+
+    return { total, done, notDone, startedAt, endedAt, duration, byOp, adjusted };
+  }, [products, state]);
+
+  const sendRecap = async () => {
+    setSending(true);
+    setError("");
+
+    const payload = {
+      action: "log-dispatch-recap",
+      sessionId,
+      supplier,
+      operator,
+      startedAt: analysis.startedAt ? new Date(analysis.startedAt).toISOString() : null,
+      endedAt: analysis.endedAt ? new Date(analysis.endedAt).toISOString() : null,
+      durationMs: analysis.duration,
+      total: analysis.total,
+      done: analysis.done,
+      notDone: analysis.notDone.length,
+      byOperator: analysis.byOp,
+      lines: products.map(p => {
+        const s = state[p._pkey] || {};
+        return {
+          article: p.article,
+          designation: p.designation,
+          recue: p.recue,
+          rob_prevu: p.rob,
+          tol_prevu: p.tol,
+          pdp_prevu: p.pdp,
+          rob_reel: s.qtyRob !== undefined ? s.qtyRob : p.rob,
+          tol_reel: s.qtyTol !== undefined ? s.qtyTol : p.tol,
+          pdp_reel: s.qtyPdp !== undefined ? s.qtyPdp : p.pdp,
+          done: !!s.done,
+          doneBy: s.doneBy || "",
+          doneAt: s.doneAt ? new Date(s.doneAt).toISOString() : ""
+        };
+      })
+    };
+
+    try {
+      // Apps Script en mode no-cors car redirection
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      setSent(true);
+    } catch (e) {
+      setError(`Erreur: ${e.message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="app">
+      <div className="header">
+        <div className="header-row">
+          <div>
+            <h1>Récap dispatch</h1>
+            <div className="sub">{supplier}</div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn" onClick={onClose}>← Retour</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="recap-section">
+        <div className="recap-card">
+          <h3>📊 Avancement</h3>
+          <div className="recap-stat">
+            <span className="label">Produits totaux</span>
+            <span className="value">{analysis.total}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Dispatchés</span>
+            <span className="value">{analysis.done}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Non traités</span>
+            <span className="value" style={{color: analysis.notDone.length > 0 ? "#d32f2f" : "#1a4d2e"}}>
+              {analysis.notDone.length}
+            </span>
+          </div>
+        </div>
+
+        <div className="recap-card">
+          <h3>⏱ Temps</h3>
+          <div className="recap-stat">
+            <span className="label">Début</span>
+            <span className="value">{fmtTime(analysis.startedAt)}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Fin</span>
+            <span className="value">{fmtTime(analysis.endedAt)}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Durée totale</span>
+            <span className="value">{fmtDuration(analysis.duration)}</span>
+          </div>
+          {analysis.done > 0 && analysis.duration > 0 && (
+            <div className="recap-stat">
+              <span className="label">Cadence</span>
+              <span className="value">
+                {(analysis.done / (analysis.duration / 60000)).toFixed(1)} produits/min
+              </span>
+            </div>
+          )}
+        </div>
+
+        {Object.keys(analysis.byOp).length > 0 && (
+          <div className="recap-card">
+            <h3>👥 Par opérateur</h3>
+            {Object.entries(analysis.byOp)
+              .sort((a,b) => b[1] - a[1])
+              .map(([name, count]) => (
+                <div className="recap-stat" key={name}>
+                  <span className="label">{name}</span>
+                  <span className="value">{count} produits</span>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {analysis.notDone.length > 0 && (
+          <div className="recap-card">
+            <h3>⚠️ Non traités ({analysis.notDone.length})</h3>
+            {analysis.notDone.map(p => (
+              <div className="anomaly-item" key={p._pkey}>
+                <div className="product">{p.designation}</div>
+                <div className="detail">
+                  Reçu: {p.recue} • ROB {p.rob} / TOL {p.tol} / PDP {p.pdp}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {analysis.adjusted.length > 0 && (
+          <div className="recap-card">
+            <h3>✎ Quantités ajustées ({analysis.adjusted.length})</h3>
+            {analysis.adjusted.map(p => {
+              const s = state[p._pkey];
+              return (
+                <div className="anomaly-item" key={p._pkey}>
+                  <div className="product">{p.designation}</div>
+                  <div className="detail">
+                    Prévu: {p.rob}/{p.tol}/{p.pdp} →
+                    Réel: {s.qtyRob ?? p.rob}/{s.qtyTol ?? p.tol}/{s.qtyPdp ?? p.pdp}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="recap-card">
+          <h3>📤 Envoyer le récap</h3>
+          {!sent && (
+            <button
+              className="btn-primary"
+              onClick={sendRecap}
+              disabled={sending}
+            >
+              {sending ? "Envoi en cours..." : "Envoyer au Google Sheet"}
+            </button>
+          )}
+          {sent && (
+            <div style={{padding: 12, background: "#e8f5e9", borderRadius: 8, color: "#1a4d2e", fontWeight: 600, textAlign: "center"}}>
+              ✓ Envoyé !
+            </div>
+          )}
+          {error && (
+            <div style={{padding: 12, background: "#ffebee", borderRadius: 8, color: "#c62828", fontSize: 13, marginTop: 8}}>
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="recap-card">
+          <h3>📄 Bons de Livraison PDF</h3>
+          <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
+            Génère un BL par magasin à imprimer ou envoyer.
+          </p>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              const sessionLike = {
+                id: sessionId,
+                supplier,
+                startedAt: analysis.startedAt,
+                createdBy: operator,
+                operators: Object.keys(analysis.byOp || {}),
+                state
+              };
+              generateAllBLs(sessionLike, products);
+            }}
+            style={{marginBottom: 8}}
+          >
+            📥 Télécharger les 3 BL (ROB / TOL / PDP)
+          </button>
+          <div style={{display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6}}>
+            <button
+              className="btn-secondary"
+              onClick={() => generateBL({
+                id: sessionId, supplier,
+                startedAt: analysis.startedAt,
+                createdBy: operator,
+                operators: Object.keys(analysis.byOp || {}),
+                state
+              }, products, "rob")}
+            >ROB</button>
+            <button
+              className="btn-secondary"
+              onClick={() => generateBL({
+                id: sessionId, supplier,
+                startedAt: analysis.startedAt,
+                createdBy: operator,
+                operators: Object.keys(analysis.byOp || {}),
+                state
+              }, products, "tol")}
+            >TOL</button>
+            <button
+              className="btn-secondary"
+              onClick={() => generateBL({
+                id: sessionId, supplier,
+                startedAt: analysis.startedAt,
+                createdBy: operator,
+                operators: Object.keys(analysis.byOp || {}),
+                state
+              }, products, "pdp")}
+            >PDP</button>
+          </div>
+        </div>
+
+        <div className="recap-card">
+          <button
+            className="btn-secondary"
+            onClick={onReset}
+            style={{background: "#ffebee", color: "#c62828"}}
+          >
+            🗑 Réinitialiser et nouveau dispatch
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   ADMIN SCREEN
+   ========================================================================= */
+
+function AdminScreen({ operator, onClose, onViewSession }) {
+  const [allSessions, setAllSessions] = useState([]);
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState("live"); // live | history | stats
+  const [loading, setLoading] = useState(true);
+
+  // Charge toutes les sessions
+  useEffect(() => {
+    if (!firebaseReady) {
+      setLoading(false);
+      return;
+    }
+    const ref = db.ref("dispatch");
+    const handler = (snap) => {
+      const all = snap.val() || {};
+      const list = [];
+      Object.entries(all).forEach(([sid, s]) => {
+        if (!s.meta) return;
+        const products = s.meta.products || [];
+        const state = s.state || {};
+        const total = products.length;
+        const done = Object.values(state).filter(x => x && x.done).length;
+
+        // Calcule la durée si fini
+        const timestamps = Object.values(state)
+          .filter(x => x && x.doneAt)
+          .map(x => x.doneAt)
+          .sort((a,b) => a - b);
+        const firstDone = timestamps[0];
+        const lastDone = timestamps[timestamps.length - 1];
+
+        // Opérateurs uniques
+        const ops = new Set();
+        Object.values(state).forEach(x => {
+          if (x && x.doneBy) ops.add(x.doneBy);
+        });
+
+        list.push({
+          id: sid,
+          supplier: s.meta.supplier || "?",
+          startedAt: s.meta.startedAt,
+          createdBy: s.meta.createdBy || "",
+          total,
+          done,
+          remaining: total - done,
+          isLive: done < total && (Date.now() - s.meta.startedAt) < 24 * 3600 * 1000,
+          isFinished: done === total && total > 0,
+          firstDone,
+          lastDone,
+          durationMs: firstDone && lastDone ? (lastDone - firstDone) : 0,
+          operators: Array.from(ops),
+          products,
+          state
+        });
+      });
+      list.sort((a,b) => (b.startedAt || 0) - (a.startedAt || 0));
+      setAllSessions(list);
+      setLoading(false);
+    };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, []);
+
+  const liveSessions = useMemo(() => allSessions.filter(s => s.isLive), [allSessions]);
+  const historySessions = useMemo(() => allSessions.filter(s => !s.isLive), [allSessions]);
+
+  const filteredHistory = useMemo(() => {
+    if (!search.trim()) return historySessions;
+    const q = stripAccents(search.toLowerCase());
+    return historySessions.filter(s =>
+      stripAccents((s.supplier || "").toLowerCase()).includes(q) ||
+      stripAccents((s.createdBy || "").toLowerCase()).includes(q) ||
+      s.operators.some(o => stripAccents(o.toLowerCase()).includes(q))
+    );
+  }, [historySessions, search]);
+
+  // Stats globales
+  const stats = useMemo(() => {
+    const finished = allSessions.filter(s => s.isFinished && s.durationMs > 0);
+    const totalProducts = finished.reduce((sum, s) => sum + s.done, 0);
+    const totalMinutes = finished.reduce((sum, s) => sum + (s.durationMs / 60000), 0);
+    const avgCadence = totalMinutes > 0 ? (totalProducts / totalMinutes).toFixed(2) : 0;
+
+    // Par fournisseur
+    const bySupplier = {};
+    finished.forEach(s => {
+      if (!bySupplier[s.supplier]) bySupplier[s.supplier] = { count: 0, products: 0, durationMs: 0 };
+      bySupplier[s.supplier].count++;
+      bySupplier[s.supplier].products += s.done;
+      bySupplier[s.supplier].durationMs += s.durationMs;
+    });
+
+    // Par opérateur
+    const byOperator = {};
+    finished.forEach(s => {
+      Object.values(s.state).forEach(st => {
+        if (st && st.done && st.doneBy) {
+          byOperator[st.doneBy] = (byOperator[st.doneBy] || 0) + 1;
+        }
+      });
+    });
+
+    return {
+      totalSessions: allSessions.length,
+      finishedSessions: finished.length,
+      totalProducts,
+      avgCadence,
+      bySupplier,
+      byOperator
+    };
+  }, [allSessions]);
+
+  return (
+    <div className="app">
+      <div className="header" style={{background: "#0d3d20"}}>
+        <div className="header-row">
+          <div>
+            <h1>🔐 Mode Admin</h1>
+            <div className="sub">{operator} • {allSessions.length} session(s) total</div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn" onClick={onClose}>← Retour</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="tabs-bar">
+        <button className={`tab ${tab === "live" ? "active" : ""}`} onClick={() => setTab("live")}>
+          🔴 En cours ({liveSessions.length})
+        </button>
+        <button className={`tab ${tab === "history" ? "active" : ""}`} onClick={() => setTab("history")}>
+          📋 Historique ({historySessions.length})
+        </button>
+        <button className={`tab ${tab === "stats" ? "active" : ""}`} onClick={() => setTab("stats")}>
+          📊 Stats
+        </button>
+      </div>
+
+      <div style={{padding: 12, paddingBottom: 80}}>
+        {loading && <div style={{textAlign: "center", padding: 40, color: "#999"}}>Chargement...</div>}
+
+        {/* ----- ONGLET LIVE ----- */}
+        {tab === "live" && !loading && (
+          <>
+            {liveSessions.length === 0 && (
+              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
+                Aucun dispatch en cours actuellement
+              </div>
+            )}
+            {liveSessions.map(s => (
+              <AdminSessionCard
+                key={s.id}
+                session={s}
+                live={true}
+                onClick={() => onViewSession(s)}
+              />
+            ))}
+          </>
+        )}
+
+        {/* ----- ONGLET HISTORIQUE ----- */}
+        {tab === "history" && !loading && (
+          <>
+            <div style={{marginBottom: 12}}>
+              <input
+                type="text"
+                placeholder="🔍 Chercher par fournisseur, opérateur..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{
+                  width: "100%", padding: 10, fontSize: 14,
+                  border: "1.5px solid #ddd", borderRadius: 8
+                }}
+              />
+            </div>
+            {filteredHistory.length === 0 && (
+              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
+                {search ? "Aucun résultat" : "Aucune session terminée"}
+              </div>
+            )}
+            {filteredHistory.map(s => (
+              <AdminSessionCard
+                key={s.id}
+                session={s}
+                live={false}
+                onClick={() => onViewSession(s)}
+              />
+            ))}
+          </>
+        )}
+
+        {/* ----- ONGLET STATS ----- */}
+        {tab === "stats" && !loading && (
+          <>
+            <div className="recap-card">
+              <h3>📊 Vue d'ensemble</h3>
+              <div className="recap-stat">
+                <span className="label">Total sessions</span>
+                <span className="value">{stats.totalSessions}</span>
+              </div>
+              <div className="recap-stat">
+                <span className="label">Sessions terminées</span>
+                <span className="value">{stats.finishedSessions}</span>
+              </div>
+              <div className="recap-stat">
+                <span className="label">Produits dispatchés (total)</span>
+                <span className="value">{stats.totalProducts}</span>
+              </div>
+              <div className="recap-stat">
+                <span className="label">Cadence moyenne</span>
+                <span className="value">{stats.avgCadence} prod/min</span>
+              </div>
+            </div>
+
+            {Object.keys(stats.bySupplier).length > 0 && (
+              <div className="recap-card">
+                <h3>🏭 Par fournisseur</h3>
+                {Object.entries(stats.bySupplier)
+                  .sort((a,b) => b[1].count - a[1].count)
+                  .map(([name, s]) => {
+                    const cadence = s.durationMs > 0 ? (s.products / (s.durationMs / 60000)).toFixed(1) : "-";
+                    return (
+                      <div className="recap-stat" key={name}>
+                        <span className="label">
+                          <b>{name}</b>
+                          <div style={{fontSize: 11, color: "#999"}}>
+                            {s.count} session(s) • {s.products} prod • {cadence} prod/min
+                          </div>
+                        </span>
+                        <span className="value">{s.count}</span>
+                      </div>
+                    );
+                })}
+              </div>
+            )}
+
+            {Object.keys(stats.byOperator).length > 0 && (
+              <div className="recap-card">
+                <h3>👥 Par opérateur</h3>
+                {Object.entries(stats.byOperator)
+                  .sort((a,b) => b[1] - a[1])
+                  .map(([name, count]) => (
+                    <div className="recap-stat" key={name}>
+                      <span className="label">{name}</span>
+                      <span className="value">{count} produits</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminSessionCard({ session, live, onClick }) {
+  const s = session;
+  const progress = s.total > 0 ? (s.done / s.total) * 100 : 0;
+  const date = s.startedAt ? new Date(s.startedAt) : null;
+  const dateStr = date ? date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
+  const timeStr = date ? date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: "#fff",
+        border: "1.5px solid " + (live ? "#d32f2f" : "#e6e8ec"),
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 8,
+        cursor: "pointer"
+      }}
+    >
+      <div style={{display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 6}}>
+        <div>
+          {live && <span style={{
+            display: "inline-block", background: "#d32f2f", color: "#fff",
+            fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 10,
+            marginRight: 6
+          }}>● LIVE</span>}
+          <span style={{fontWeight: 700, fontSize: 14}}>{s.supplier}</span>
+        </div>
+        <div style={{fontSize: 11, color: "#999"}}>
+          {dateStr} {timeStr}
+        </div>
+      </div>
+
+      <div style={{fontSize: 11, color: "#666", marginBottom: 8}}>
+        Par <b>{s.createdBy || "?"}</b>
+        {s.operators.length > 1 && ` + ${s.operators.filter(o => o !== s.createdBy).join(", ")}`}
+      </div>
+
+      <div style={{display: "flex", gap: 12, fontSize: 12, marginBottom: 6}}>
+        <span>📦 <b>{s.done}/{s.total}</b></span>
+        {s.durationMs > 0 && <span>⏱ {fmtDuration(s.durationMs)}</span>}
+        {s.durationMs > 0 && s.done > 0 && (
+          <span>⚡ {(s.done / (s.durationMs / 60000)).toFixed(1)}/min</span>
+        )}
+      </div>
+
+      <div className="progress-bar">
+        <div className="progress-fill" style={{
+          width: `${progress}%`,
+          background: progress === 100 ? "#4caf50" : (live ? "#ff9800" : "#1a4d2e")
+        }}></div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   ADMIN SESSION DETAIL (vue détaillée d'une session pour admin)
+   ========================================================================= */
+
+function AdminSessionDetail({ session, onClose }) {
+  const s = session;
+  const date = s.startedAt ? new Date(s.startedAt) : null;
+  const dateStr = date ? date.toLocaleString("fr-FR") : "";
+
+  const products = s.products || [];
+  const productsWithKeys = useMemo(() => {
+    return products.map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }));
+  }, [products]);
+
+  const doneProducts = productsWithKeys.filter(p => s.state[p._pkey]?.done);
+  const notDoneProducts = productsWithKeys.filter(p => !s.state[p._pkey]?.done);
+  const adjusted = doneProducts.filter(p => {
+    const st = s.state[p._pkey];
+    return (st.qtyRob !== undefined && st.qtyRob !== p.rob) ||
+           (st.qtyTol !== undefined && st.qtyTol !== p.tol) ||
+           (st.qtyPdp !== undefined && st.qtyPdp !== p.pdp);
+  });
+
+  return (
+    <div className="app">
+      <div className="header" style={{background: "#0d3d20"}}>
+        <div className="header-row">
+          <div>
+            <h1>{s.supplier}</h1>
+            <div className="sub">{dateStr}</div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn" onClick={onClose}>← Retour</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{padding: 12, paddingBottom: 80}}>
+        <div className="recap-card">
+          <h3>Vue d'ensemble</h3>
+          <div className="recap-stat">
+            <span className="label">Créé par</span>
+            <span className="value">{s.createdBy || "?"}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Opérateurs</span>
+            <span className="value">{s.operators.join(", ") || "-"}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Avancement</span>
+            <span className="value">{s.done}/{s.total}</span>
+          </div>
+          {s.durationMs > 0 && (
+            <div className="recap-stat">
+              <span className="label">Durée</span>
+              <span className="value">{fmtDuration(s.durationMs)}</span>
+            </div>
+          )}
+          {s.durationMs > 0 && s.done > 0 && (
+            <div className="recap-stat">
+              <span className="label">Cadence</span>
+              <span className="value">{(s.done / (s.durationMs / 60000)).toFixed(2)} prod/min</span>
+            </div>
+          )}
+        </div>
+
+        {notDoneProducts.length > 0 && (
+          <div className="recap-card">
+            <h3>⏳ Non traités ({notDoneProducts.length})</h3>
+            {notDoneProducts.map(p => (
+              <div className="anomaly-item" key={p._pkey}>
+                <div className="product">{p.designation}</div>
+                <div className="detail">Reçu: {p.recue} • ROB {p.rob} / TOL {p.tol} / PDP {p.pdp}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {adjusted.length > 0 && (
+          <div className="recap-card">
+            <h3>✎ Quantités ajustées ({adjusted.length})</h3>
+            {adjusted.map(p => {
+              const st = s.state[p._pkey];
+              return (
+                <div className="anomaly-item" key={p._pkey}>
+                  <div className="product">{p.designation}</div>
+                  <div className="detail">
+                    Prévu: {p.rob}/{p.tol}/{p.pdp} →
+                    Réel: {st.qtyRob ?? p.rob}/{st.qtyTol ?? p.tol}/{st.qtyPdp ?? p.pdp}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="recap-card">
+          <h3>📄 Générer les BL PDF</h3>
+          <button
+            className="btn-primary"
+            onClick={() => generateAllBLs(s, productsWithKeys)}
+            style={{marginBottom: 8}}
+          >
+            📥 Télécharger les 3 BL (ROB / TOL / PDP)
+          </button>
+          <div style={{display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6}}>
+            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "rob")}>ROB</button>
+            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "tol")}>TOL</button>
+            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "pdp")}>PDP</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   PDF GENERATION (BL par magasin)
+   ========================================================================= */
+
+function generateBL(session, productsWithKeys, store) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+  const storeName = store.toUpperCase();
+  const storeFullName = { rob: "ROBESPIERRE", tol: "TOLBIAC", pdp: "PORTE DE PANTIN" }[store];
+
+  const date = session.startedAt ? new Date(session.startedAt) : new Date();
+  const dateStr = date.toLocaleDateString("fr-FR");
+
+  // Header
+  doc.setFillColor(26, 77, 46);
+  doc.rect(0, 0, 210, 25, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont(undefined, "bold");
+  doc.text("KELBONGOO", 14, 12);
+  doc.setFontSize(11);
+  doc.setFont(undefined, "normal");
+  doc.text("Bon de Livraison Magasin", 14, 19);
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont(undefined, "bold");
+  doc.text(storeName, 196, 15, { align: "right" });
+
+  // Info section
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(10);
+  doc.setFont(undefined, "normal");
+
+  let y = 35;
+  doc.text(`Magasin destinataire :`, 14, y);
+  doc.setFont(undefined, "bold");
+  doc.text(storeFullName, 60, y);
+
+  y += 6;
+  doc.setFont(undefined, "normal");
+  doc.text(`Fournisseur :`, 14, y);
+  doc.setFont(undefined, "bold");
+  doc.text(session.supplier || "?", 60, y);
+
+  y += 6;
+  doc.setFont(undefined, "normal");
+  doc.text(`Date dispatch :`, 14, y);
+  doc.setFont(undefined, "bold");
+  doc.text(dateStr, 60, y);
+
+  y += 6;
+  doc.setFont(undefined, "normal");
+  doc.text(`Préparé par :`, 14, y);
+  doc.setFont(undefined, "bold");
+  doc.text((session.operators || []).join(", ") || session.createdBy || "-", 60, y);
+
+  y += 10;
+
+  // Filtre les produits avec quantité > 0 pour ce magasin
+  const items = productsWithKeys
+    .map(p => {
+      const st = session.state[p._pkey] || {};
+      const qty = st[`qty${storeName === "ROB" ? "Rob" : storeName === "TOL" ? "Tol" : "Pdp"}`];
+      const finalQty = qty !== undefined ? qty : p[store];
+      return { ...p, _qty: finalQty, _done: !!st.done };
+    })
+    .filter(p => p._qty > 0)
+    .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
+
+  // Tableau produits
+  doc.autoTable({
+    startY: y,
+    head: [["Code article", "Désignation", "Quantité", "✓"]],
+    body: items.map(p => [
+      p.article || "-",
+      p.designation,
+      String(p._qty),
+      p._done ? "✓" : ""
+    ]),
+    theme: "striped",
+    headStyles: {
+      fillColor: [26, 77, 46],
+      textColor: 255,
+      fontStyle: "bold",
+      fontSize: 9
+    },
+    styles: {
+      fontSize: 9,
+      cellPadding: 2
+    },
+    columnStyles: {
+      0: { cellWidth: 32, fontStyle: "bold" },
+      1: { cellWidth: 110 },
+      2: { cellWidth: 20, halign: "center", fontStyle: "bold" },
+      3: { cellWidth: 12, halign: "center" }
+    },
+    margin: { left: 14, right: 14 }
+  });
+
+  // Pied de page - total
+  const totalQty = items.reduce((sum, p) => sum + p._qty, 0);
+  const finalY = doc.lastAutoTable.finalY + 5;
+
+  doc.setFillColor(240, 240, 240);
+  doc.rect(14, finalY, 182, 10, "F");
+  doc.setFontSize(11);
+  doc.setFont(undefined, "bold");
+  doc.text(`TOTAL : ${items.length} référence(s) — ${totalQty} unité(s)`, 18, finalY + 7);
+
+  // Zone signatures
+  const sigY = finalY + 20;
+  doc.setFontSize(9);
+  doc.setFont(undefined, "normal");
+  doc.text("Signature préparateur :", 14, sigY);
+  doc.text("Signature réception magasin :", 110, sigY);
+  doc.rect(14, sigY + 3, 80, 25);
+  doc.rect(110, sigY + 3, 80, 25);
+
+  // Footer
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text(
+    `Généré le ${new Date().toLocaleString("fr-FR")} • Session: ${session.id}`,
+    14, 287
+  );
+
+  const filename = `BL_${storeName}_${(session.supplier||"").replace(/[^a-zA-Z0-9]/g,"")}_${dateStr.replace(/\//g, "-")}.pdf`;
+  doc.save(filename);
+}
+
+function generateAllBLs(session, productsWithKeys) {
+  generateBL(session, productsWithKeys, "rob");
+  setTimeout(() => generateBL(session, productsWithKeys, "tol"), 300);
+  setTimeout(() => generateBL(session, productsWithKeys, "pdp"), 600);
+}
+
+/* =========================================================================
+   APP ROOT
+   ========================================================================= */
+
+function App() {
+  const [operator, setOperator] = useState(localStorage.getItem("dispatch_operator") || "");
+  const [sessionId, setSessionId] = useState(localStorage.getItem("dispatch_sessionId") || "");
+  const [supplier, setSupplier] = useState(localStorage.getItem("dispatch_supplier") || "");
+  const [products, setProducts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dispatch_products") || "[]"); }
+    catch { return []; }
+  });
+  const [view, setView] = useState("dispatch"); // dispatch | recap | admin | adminSession
+  const [recapData, setRecapData] = useState(null);
+  const [adminViewingSession, setAdminViewingSession] = useState(null);
+
+  // Persistance locale du contexte
+  useEffect(() => {
+    if (sessionId) localStorage.setItem("dispatch_sessionId", sessionId);
+    if (supplier) localStorage.setItem("dispatch_supplier", supplier);
+    if (products.length > 0) localStorage.setItem("dispatch_products", JSON.stringify(products));
+  }, [sessionId, supplier, products]);
+
+  const handleSessionStart = (sid, sup, prods) => {
+    setSessionId(sid);
+    setSupplier(sup);
+    setProducts(prods);
+    setView("dispatch");
+
+    if (firebaseReady) {
+      db.ref(`dispatch/${sid}/meta`).set({
+        supplier: sup,
+        startedAt: Date.now(),
+        products: prods,
+        createdBy: operator
+      });
+    }
+  };
+
+  const handleJoinSession = (sid) => {
+    if (!firebaseReady) return;
+    db.ref(`dispatch/${sid}/meta`).once("value").then(snap => {
+      const m = snap.val();
+      if (m) {
+        setSessionId(sid);
+        setSupplier(m.supplier || "Fournisseur");
+        setProducts(m.products || []);
+        setView("dispatch");
+      }
+    });
+  };
+
+  const handleFinish = (state, productsWithKeys) => {
+    setRecapData({ state, products: productsWithKeys });
+    setView("recap");
+  };
+
+  const handleReset = () => {
+    if (!confirm("Effacer ce dispatch et tout recommencer ?")) return;
+    localStorage.removeItem("dispatch_sessionId");
+    localStorage.removeItem("dispatch_supplier");
+    localStorage.removeItem("dispatch_products");
+    setSessionId("");
+    setSupplier("");
+    setProducts([]);
+    setRecapData(null);
+    setView("dispatch");
+  };
+
+  if (!operator) {
+    return <LoginScreen onLogin={setOperator} />;
+  }
+
+  // Mode Admin : détail d'une session
+  if (view === "adminSession" && adminViewingSession) {
+    return (
+      <AdminSessionDetail
+        session={adminViewingSession}
+        onClose={() => { setAdminViewingSession(null); setView("admin"); }}
+      />
+    );
+  }
+
+  // Mode Admin : liste / stats
+  if (view === "admin") {
+    if (!isAdmin(operator)) {
+      // Sécurité supplémentaire au cas où
+      return (
+        <div className="screen-center">
+          <div className="card">
+            <h3>Accès refusé</h3>
+            <p style={{color: "#666", fontSize: 13}}>Tu n'as pas les droits administrateur.</p>
+            <button className="btn-primary" onClick={() => setView("dispatch")}>Retour</button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <AdminScreen
+        operator={operator}
+        onClose={() => setView("dispatch")}
+        onViewSession={(s) => { setAdminViewingSession(s); setView("adminSession"); }}
+      />
+    );
+  }
+
+  if (!sessionId || products.length === 0) {
+    return (
+      <UploadScreen
+        operator={operator}
+        onSessionStart={handleSessionStart}
+        onJoinSession={handleJoinSession}
+        onOpenAdmin={() => setView("admin")}
+      />
+    );
+  }
+
+  if (view === "recap" && recapData) {
+    return (
+      <RecapScreen
+        sessionId={sessionId}
+        operator={operator}
+        supplier={supplier}
+        products={recapData.products}
+        state={recapData.state}
+        onClose={() => setView("dispatch")}
+        onReset={handleReset}
+      />
+    );
+  }
+
+  return (
+    <DispatchScreen
+      sessionId={sessionId}
+      operator={operator}
+      supplier={supplier}
+      products={products}
+      onFinish={handleFinish}
+      onBack={handleReset}
+    />
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
