@@ -507,22 +507,33 @@ function parseExcelFile(workbook) {
   for (let i = 0; i < Math.min(rows.length, 20); i++) {
     const row = rows[i].map(c => normCol(c));
     // Une ligne d'en-têtes contient au moins une colonne désignation/produit
-    // ET au moins une colonne magasin (ou un code article)
+    // Les colonnes magasin sont optionnelles (si absentes -> tout va vers PDP)
     const hasDesig = row.some(c => c.includes("designation") || c === "produit" || c === "libelle" || c === "libellé");
-    const hasStore = row.some(c => detectStore(c) !== null);
-    if (hasDesig && hasStore) {
+    if (hasDesig) {
       headerIdx = i;
       headers = rows[i];
       break;
     }
   }
   if (headerIdx === -1) {
-    throw new Error("Impossible de trouver les en-têtes (désignation/produit + ROB/TOL/PDP ou Magasin 01/03/98) dans le fichier.");
+    throw new Error("Impossible de trouver une colonne désignation/produit dans le fichier.");
   }
+
+  // Détection de colonne "quantité" générique pour les BDC sans magasin
+  // Cherche une colonne nommée "quantité", "qte", "qty", "uvc" (unité commande)
+  const detectQuantity = (cellNorm) => {
+    if (!cellNorm) return false;
+    if (cellNorm === "quantite" || cellNorm === "qte" || cellNorm === "qty") return true;
+    if (cellNorm === "commande" || cellNorm === "commande en uvc") return true;
+    // Colonnes type "Commande" sans magasin spécifique
+    return false;
+  };
 
   // Map des colonnes
   const colMap = {};
   let isG5Format = false;
+  let quantityColIdx = -1; // Colonne quantité générique (fallback si pas de magasins)
+
   headers.forEach((h, idx) => {
     const n = normCol(h);
     if (!n) return;
@@ -554,9 +565,43 @@ function parseExcelFile(workbook) {
     }
   });
 
+  // Si pas de magasins détectés → on cherche une colonne "quantité" générique
+  // qu'on attribuera à PDP par défaut
+  const hasAnyStore = colMap.rob !== undefined || colMap.tol !== undefined || colMap.pdp !== undefined;
+  if (!hasAnyStore) {
+    headers.forEach((h, idx) => {
+      const n = normCol(h);
+      if (!n) return;
+      if (idx === colMap.article || idx === colMap.designation ||
+          idx === colMap.cmd || idx === colMap.recue) return;
+      // Cherche colonne quantité/qte/uvc/commande
+      if (quantityColIdx === -1 && (
+        n === "quantite" || n === "qte" || n === "qty" ||
+        n === "commande en uvc" || n === "uvc" || n === "uc" ||
+        (n.includes("quantite") && !n.includes("recept")) ||
+        (n.includes("commande") && !detectStore(n))
+      )) {
+        quantityColIdx = idx;
+      }
+    });
+    // Si on trouve une quantité, on l'utilise pour PDP
+    if (quantityColIdx !== -1) {
+      colMap.pdp = quantityColIdx;
+    }
+    // Sinon, si on a une colonne "commande" (cmd détecté plus haut), on l'utilise pour PDP
+    else if (colMap.cmd !== undefined) {
+      colMap.pdp = colMap.cmd;
+    }
+  }
+
   // Si on n'a pas trouvé de désignation, c'est qu'il y a un problème
   if (colMap.designation === undefined) {
     throw new Error("Impossible de trouver une colonne désignation/produit dans le fichier.");
+  }
+
+  // Vérifie qu'on a au moins UNE source de quantité (un magasin OU une quantité)
+  if (colMap.rob === undefined && colMap.tol === undefined && colMap.pdp === undefined) {
+    throw new Error("Aucune colonne de quantité trouvée. Ajoute une colonne 'Quantité', 'ROB', 'TOL' ou 'PDP'.");
   }
 
   // Parse les lignes produit
