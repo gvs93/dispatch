@@ -502,21 +502,50 @@ function parseExcelFile(workbook) {
   };
 
   // Cherche la ligne d'en-têtes
+  // Plusieurs stratégies pour trouver la ligne d'en-tête :
+  // 1. Une ligne contenant désignation/produit/libellé/nom
+  // 2. Si pas trouvé, une ligne contenant un mot-clé quantité (commande, cde, qte, etc.)
   let headerIdx = -1;
   let headers = null;
+
+  // Stratégie 1 : recherche d'en-tête classique
   for (let i = 0; i < Math.min(rows.length, 20); i++) {
     const row = rows[i].map(c => normCol(c));
-    // Une ligne d'en-têtes contient au moins une colonne désignation/produit
-    // Les colonnes magasin sont optionnelles (si absentes -> tout va vers PDP)
-    const hasDesig = row.some(c => c.includes("designation") || c === "produit" || c === "libelle" || c === "libellé");
+    const hasDesig = row.some(c =>
+      c.includes("designation") || c === "produit" || c === "libelle" ||
+      c === "libellé" || c === "nom" || c === "article" ||
+      c === "description" || c.includes("designation produit")
+    );
     if (hasDesig) {
       headerIdx = i;
       headers = rows[i];
       break;
     }
   }
+
+  // Stratégie 2 : si rien trouvé, cherche une ligne avec mots-clés quantité
+  // C'est souvent la ligne d'en-tête même si la colonne produit a un nom inhabituel
   if (headerIdx === -1) {
-    throw new Error("Impossible de trouver une colonne désignation/produit dans le fichier.");
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      const row = rows[i].map(c => normCol(c));
+      const hasQty = row.some(c =>
+        c === "quantite" || c === "qte" || c === "qty" ||
+        c === "uvc" || c === "cde en uvc" || c === "cde" ||
+        c.includes("commande") || detectStore(c) !== null
+      );
+      // En plus, la ligne doit avoir au moins une colonne non vide qui ressemble à un en-tête
+      // (texte court < 50 chars, pas que des chiffres)
+      const hasTextHeader = row.some(c => c.length > 0 && c.length < 50 && !/^\d+([.,]\d+)?$/.test(c));
+      if (hasQty && hasTextHeader) {
+        headerIdx = i;
+        headers = rows[i];
+        break;
+      }
+    }
+  }
+
+  if (headerIdx === -1) {
+    throw new Error("Impossible de trouver une ligne d'en-têtes dans le fichier (cherché : produit/désignation/article/quantité/commande).");
   }
 
   // Détection de colonne "quantité" générique pour les BDC sans magasin
@@ -534,24 +563,35 @@ function parseExcelFile(workbook) {
   let isG5Format = false;
   let quantityColIdx = -1; // Colonne quantité générique (fallback si pas de magasins)
 
+  // Première passe : on classe les colonnes en évitant les ambiguïtés
+  // ("Article" peut être un code ou la désignation selon le fichier)
+  const articleAsCode = [];
+  const designationCandidates = [];
+
   headers.forEach((h, idx) => {
     const n = normCol(h);
     if (!n) return;
 
-    // Code article : "article", "code article", "code", "réf", "reference"
-    if (n === "article" || n === "code article" || n === "code" || n === "ref" || n === "reference") {
-      if (colMap.article === undefined) colMap.article = idx;
-    }
-    // Désignation : "désignation", "produit", "libellé", "nom"
-    else if (n.includes("designation") || n === "produit" || n === "libelle" || n === "libellé" || n === "nom") {
+    // Désignation prioritaire (mots qui signifient clairement nom produit)
+    if (n.includes("designation") || n === "produit" || n === "libelle" || n === "libellé" ||
+        n === "nom" || n === "description") {
       if (colMap.designation === undefined) colMap.designation = idx;
     }
-    // Commande : "cmd", "commande", "quantité commandée"
-    // Attention : "Commande PDP" doit aller dans les magasins, pas la commande globale
-    else if (detectStore(n) === null && (n.includes("cmd") || n === "commande" || (n.includes("commande") && !detectStore(n)))) {
+    // "Article" : on garde en candidat (code OU désignation, on tranche après)
+    else if (n === "article") {
+      articleAsCode.push(idx);
+    }
+    // Code/ref article
+    else if (n === "code article" || n === "code" || n === "ref" ||
+             n === "reference" || n === "référence") {
+      if (colMap.article === undefined) colMap.article = idx;
+    }
+    // Commande (sans nom de magasin)
+    else if (detectStore(n) === null && (n.includes("cmd") || n === "commande" ||
+             (n.includes("commande") && !detectStore(n)))) {
       if (colMap.cmd === undefined) colMap.cmd = idx;
     }
-    // Réception : "réceptionnées", "reçu", "reception"
+    // Réception
     else if (n.includes("recept") || n.includes("recu") || n === "reçu") {
       if (colMap.recue === undefined) colMap.recue = idx;
     }
@@ -565,8 +605,59 @@ function parseExcelFile(workbook) {
     }
   });
 
+  // Si on n'a pas de désignation mais on a une colonne "Article",
+  // analyse le contenu pour décider si c'est un code (chiffres) ou un nom
+  if (colMap.designation === undefined && articleAsCode.length > 0) {
+    const articleIdx = articleAsCode[0];
+    // Regarde les 5 premières lignes de données pour ce champ
+    let textCount = 0;
+    let numericCount = 0;
+    for (let i = headerIdx + 1; i < Math.min(headerIdx + 6, rows.length); i++) {
+      const v = (rows[i] && rows[i][articleIdx]) ? String(rows[i][articleIdx]).trim() : "";
+      if (!v) continue;
+      // Si c'est principalement des chiffres (>= 8 chiffres) = code article
+      if (/^\d{6,}$/.test(v)) numericCount++;
+      // Si c'est du texte de plus de 5 caractères = désignation
+      else if (v.length > 5 && /[a-zA-Z]/.test(v)) textCount++;
+    }
+    if (textCount > numericCount) {
+      colMap.designation = articleIdx;
+    } else {
+      if (colMap.article === undefined) colMap.article = articleIdx;
+    }
+  }
+
+  // Si TOUJOURS pas de désignation, on cherche la colonne avec le contenu textuel le plus long
+  // (c'est presque sûrement la désignation produit)
+  if (colMap.designation === undefined) {
+    const usedCols = new Set([colMap.article, colMap.cmd, colMap.recue,
+                              colMap.rob, colMap.tol, colMap.pdp].filter(x => x !== undefined));
+    let bestIdx = -1;
+    let bestAvgLen = 0;
+    for (let c = 0; c < headers.length; c++) {
+      if (usedCols.has(c)) continue;
+      // Calcule longueur moyenne du contenu texte (non vide, non purement numérique)
+      let totalLen = 0;
+      let count = 0;
+      for (let i = headerIdx + 1; i < Math.min(headerIdx + 11, rows.length); i++) {
+        const v = (rows[i] && rows[i][c]) ? String(rows[i][c]).trim() : "";
+        if (!v) continue;
+        if (/^[\d\s.,]+$/.test(v)) continue; // ignore valeurs purement numériques
+        totalLen += v.length;
+        count++;
+      }
+      const avg = count > 0 ? totalLen / count : 0;
+      if (avg > bestAvgLen && avg > 8) { // au moins 8 caractères en moyenne
+        bestAvgLen = avg;
+        bestIdx = c;
+      }
+    }
+    if (bestIdx !== -1) {
+      colMap.designation = bestIdx;
+    }
+  }
+
   // Si pas de magasins détectés → on cherche une colonne "quantité" générique
-  // qu'on attribuera à PDP par défaut
   const hasAnyStore = colMap.rob !== undefined || colMap.tol !== undefined || colMap.pdp !== undefined;
   if (!hasAnyStore) {
     headers.forEach((h, idx) => {
@@ -574,12 +665,15 @@ function parseExcelFile(workbook) {
       if (!n) return;
       if (idx === colMap.article || idx === colMap.designation ||
           idx === colMap.cmd || idx === colMap.recue) return;
-      // Cherche colonne quantité/qte/uvc/commande
+      // Cherche colonne quantité/qte/uvc/commande/cde
       if (quantityColIdx === -1 && (
         n === "quantite" || n === "qte" || n === "qty" ||
         n === "commande en uvc" || n === "uvc" || n === "uc" ||
+        n === "cde en uvc" || n === "cde" ||
+        n.includes("cde en uvc") || n.includes("commande en uvc") ||
         (n.includes("quantite") && !n.includes("recept")) ||
-        (n.includes("commande") && !detectStore(n))
+        (n.includes("commande") && !detectStore(n)) ||
+        (n.startsWith("cde") && !detectStore(n))
       )) {
         quantityColIdx = idx;
       }
@@ -601,7 +695,7 @@ function parseExcelFile(workbook) {
 
   // Vérifie qu'on a au moins UNE source de quantité (un magasin OU une quantité)
   if (colMap.rob === undefined && colMap.tol === undefined && colMap.pdp === undefined) {
-    throw new Error("Aucune colonne de quantité trouvée. Ajoute une colonne 'Quantité', 'ROB', 'TOL' ou 'PDP'.");
+    throw new Error("Aucune colonne de quantité trouvée. Ajoute une colonne 'Quantité', 'CDE en UVC', 'ROB', 'TOL' ou 'PDP'.");
   }
 
   // Parse les lignes produit
