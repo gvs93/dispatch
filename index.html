@@ -476,49 +476,88 @@ function parseExcelFile(workbook) {
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
+  // Fonction helper : détecte si une cellule d'en-tête correspond à un magasin
+  // Reconnait: "ROB", "TOL", "PDP" exacts
+  //            "Magasin 01/03/98"
+  //            "Commande ROB", "Cmd ROB", "ROB Commande", etc.
+  const detectStore = (cellNorm) => {
+    if (!cellNorm) return null;
+    // Match exact
+    if (cellNorm === "rob") return "rob";
+    if (cellNorm === "tol") return "tol";
+    if (cellNorm === "pdp") return "pdp";
+    // Magasin XX
+    if (cellNorm.startsWith("magasin")) {
+      const code = cellNorm.replace("magasin", "").trim();
+      if (G5_STORE_MAP[code]) return G5_STORE_MAP[code];
+      return null;
+    }
+    // Mot ROB/TOL/PDP isolé dans un libellé "Commande ROB", "Cmd TOL", "Cde PDP", etc.
+    // On split par espaces, tirets, parenthèses
+    const tokens = cellNorm.split(/[\s\-_()\/]+/).filter(Boolean);
+    if (tokens.includes("rob")) return "rob";
+    if (tokens.includes("tol")) return "tol";
+    if (tokens.includes("pdp")) return "pdp";
+    return null;
+  };
+
   // Cherche la ligne d'en-têtes
   let headerIdx = -1;
   let headers = null;
   for (let i = 0; i < Math.min(rows.length, 20); i++) {
     const row = rows[i].map(c => normCol(c));
-    const hasArt = row.some(c => c === "article");
-    const hasDesig = row.some(c => c.includes("designation"));
-    const hasDest = row.some(c => ["rob","tol","pdp"].includes(c) || c.startsWith("magasin"));
-    if ((hasArt && hasDesig) || (hasDesig && hasDest)) {
+    // Une ligne d'en-têtes contient au moins une colonne désignation/produit
+    // ET au moins une colonne magasin (ou un code article)
+    const hasDesig = row.some(c => c.includes("designation") || c === "produit" || c === "libelle" || c === "libellé");
+    const hasStore = row.some(c => detectStore(c) !== null);
+    if (hasDesig && hasStore) {
       headerIdx = i;
       headers = rows[i];
       break;
     }
   }
   if (headerIdx === -1) {
-    throw new Error("Impossible de trouver les en-têtes (Article / désignation / ROB-TOL-PDP ou Magasin 01-03-98) dans le fichier.");
+    throw new Error("Impossible de trouver les en-têtes (désignation/produit + ROB/TOL/PDP ou Magasin 01/03/98) dans le fichier.");
   }
 
-  // Map des colonnes - on supporte deux formats:
-  // Format A (legacy): colonnes "ROB", "TOL", "PDP"
-  // Format B (G5):     colonnes "Magasin 01", "Magasin 03", "Magasin 98"
+  // Map des colonnes
   const colMap = {};
   let isG5Format = false;
   headers.forEach((h, idx) => {
     const n = normCol(h);
-    if (n === "article") colMap.article = idx;
-    else if (n.includes("designation")) colMap.designation = idx;
-    else if (n.includes("cmd")) colMap.cmd = idx;
-    else if (n.includes("recept")) colMap.recue = idx;
-    else if (n === "rob") colMap.rob = idx;
-    else if (n === "tol") colMap.tol = idx;
-    else if (n === "pdp") colMap.pdp = idx;
-    // Format G5: "Magasin 01", "Magasin 03", "Magasin 98"
-    else if (n.startsWith("magasin")) {
-      const code = n.replace("magasin", "").trim();
-      const dest = G5_STORE_MAP[code];
-      if (dest) {
-        colMap[dest] = idx;
-        isG5Format = true;
+    if (!n) return;
+
+    // Code article : "article", "code article", "code", "réf", "reference"
+    if (n === "article" || n === "code article" || n === "code" || n === "ref" || n === "reference") {
+      if (colMap.article === undefined) colMap.article = idx;
+    }
+    // Désignation : "désignation", "produit", "libellé", "nom"
+    else if (n.includes("designation") || n === "produit" || n === "libelle" || n === "libellé" || n === "nom") {
+      if (colMap.designation === undefined) colMap.designation = idx;
+    }
+    // Commande : "cmd", "commande", "quantité commandée"
+    // Attention : "Commande PDP" doit aller dans les magasins, pas la commande globale
+    else if (detectStore(n) === null && (n.includes("cmd") || n === "commande" || (n.includes("commande") && !detectStore(n)))) {
+      if (colMap.cmd === undefined) colMap.cmd = idx;
+    }
+    // Réception : "réceptionnées", "reçu", "reception"
+    else if (n.includes("recept") || n.includes("recu") || n === "reçu") {
+      if (colMap.recue === undefined) colMap.recue = idx;
+    }
+    // Magasins
+    else {
+      const store = detectStore(n);
+      if (store) {
+        colMap[store] = idx;
+        if (n.startsWith("magasin")) isG5Format = true;
       }
-      // Magasin 05 et autres : on ignore
     }
   });
+
+  // Si on n'a pas trouvé de désignation, c'est qu'il y a un problème
+  if (colMap.designation === undefined) {
+    throw new Error("Impossible de trouver une colonne désignation/produit dans le fichier.");
+  }
 
   // Parse les lignes produit
   const products = [];
@@ -529,24 +568,60 @@ function parseExcelFile(workbook) {
     const designation = (row[colMap.designation] || "").toString().trim();
     if (!designation) continue;
 
-    // Parser : G5 si on a détecté le format, sinon parser simple
+    // Ignore les lignes de totaux (montant ht, montant ttc, tva, etc.)
+    const desigLower = stripAccents(designation.toLowerCase());
+    if (desigLower.includes("montant ht") ||
+        desigLower.includes("montant ttc") ||
+        desigLower.includes("montant tva") ||
+        desigLower === "total" ||
+        desigLower === "totaux") {
+      continue;
+    }
+
+    // Parser adapté au format
     const parse = isG5Format ? parseG5Cell : (v) => {
       if (v === "" || v === null || v === undefined) return 0;
       const s = v.toString().trim();
       const m = s.match(/^(\d+)\s*u/);
       if (m) return parseInt(m[1], 10);
-      const n = parseFloat(s);
-      return isNaN(n) ? 0 : n;
+      // Gère aussi les nombres avec virgule décimale française "1,5"
+      const cleaned = s.replace(",", ".");
+      const n = parseFloat(cleaned);
+      return isNaN(n) ? 0 : Math.round(n);
     };
 
+    const rob = colMap.rob !== undefined ? parse(row[colMap.rob]) : 0;
+    const tol = colMap.tol !== undefined ? parse(row[colMap.tol]) : 0;
+    const pdp = colMap.pdp !== undefined ? parse(row[colMap.pdp]) : 0;
+
+    // Si la quantité reçue n'est pas dans le fichier (cas BDC),
+    // on la déduit de la somme des magasins
+    let recue;
+    if (colMap.recue !== undefined) {
+      recue = parse(row[colMap.recue]);
+    } else {
+      recue = rob + tol + pdp;
+    }
+
+    // Si la commande n'est pas dans le fichier, on prend la reçue par défaut
+    let cmd;
+    if (colMap.cmd !== undefined) {
+      cmd = parse(row[colMap.cmd]);
+    } else {
+      cmd = recue;
+    }
+
+    // On n'ajoute pas les lignes où tous les magasins sont à 0 (lignes vides ou non commandées)
+    if (rob === 0 && tol === 0 && pdp === 0 && recue === 0) continue;
+
     products.push({
-      article: (row[colMap.article] || "").toString().trim(),
+      article: colMap.article !== undefined ? (row[colMap.article] || "").toString().trim() : "",
       designation,
-      cmd: parse(row[colMap.cmd]),
-      recue: parse(row[colMap.recue]),
-      rob: colMap.rob !== undefined ? parse(row[colMap.rob]) : 0,
-      tol: colMap.tol !== undefined ? parse(row[colMap.tol]) : 0,
-      pdp: colMap.pdp !== undefined ? parse(row[colMap.pdp]) : 0
+      cmd,
+      recue,
+      rob,
+      tol,
+      pdp
     });
   }
 
@@ -696,6 +771,14 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
   const [pendingFile, setPendingFile] = useState(null);
   const fileRef = useRef(null);
 
+  // État du chargement BDC depuis Drive
+  const [showBdcModal, setShowBdcModal] = useState(false);
+  const [bdcList, setBdcList] = useState([]);
+  const [bdcLoading, setBdcLoading] = useState(false);
+  const [bdcError, setBdcError] = useState("");
+  const [bdcSupplier, setBdcSupplier] = useState("");
+  const [loadingBdcId, setLoadingBdcId] = useState(null);
+
   // Vérifie si une session est déjà active (sessions non terminées, peu importe l'âge)
   const [activeSessions, setActiveSessions] = useState([]);
   useEffect(() => {
@@ -720,6 +803,67 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
     ref.on("value", handler);
     return () => ref.off("value", handler);
   }, []);
+
+  // Charge la liste des BDC depuis Apps Script
+  const openBdcModal = async () => {
+    setShowBdcModal(true);
+    setBdcLoading(true);
+    setBdcError("");
+    setBdcList([]);
+    try {
+      // Apps Script avec no-cors ne renvoie pas de réponse lisible, donc on doit utiliser GET
+      const url = `${APPS_SCRIPT_URL}?action=list-bdcs`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.success) {
+        setBdcList(data.bdcs || []);
+        if ((data.bdcs || []).length === 0) {
+          setBdcError("Aucun BDC trouvé dans le dossier Drive (modifié dans les 3 derniers jours, nom contenant 'BDC').");
+        }
+      } else {
+        setBdcError(data.error || "Erreur inconnue");
+      }
+    } catch (e) {
+      setBdcError(`Impossible de charger la liste : ${e.message}`);
+    } finally {
+      setBdcLoading(false);
+    }
+  };
+
+  const loadBdc = async (bdc) => {
+    if (!bdcSupplier.trim()) {
+      setBdcError("Indique d'abord le nom du fournisseur (qui apparaîtra sur les BL).");
+      return;
+    }
+    setLoadingBdcId(bdc.id);
+    setBdcError("");
+    try {
+      const url = `${APPS_SCRIPT_URL}?action=get-bdc&fileId=${encodeURIComponent(bdc.id)}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "Erreur de chargement du BDC");
+
+      // Construit un workbook compatible avec le parseur existant
+      const ws = XLSX.utils.aoa_to_sheet(data.rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "BDC");
+
+      const products = parseExcelFile(wb);
+      if (products.length === 0) {
+        throw new Error("Aucun produit reconnu dans ce BDC (vérifie les en-têtes de colonnes).");
+      }
+
+      const supplier = bdcSupplier.trim();
+      const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
+      setShowBdcModal(false);
+      setBdcSupplier("");
+      onSessionStart(sessionId, supplier, products);
+    } catch (e) {
+      setBdcError(e.message);
+    } finally {
+      setLoadingBdcId(null);
+    }
+  };
 
   const handleFileSelected = (file) => {
     if (!file) return;
@@ -835,6 +979,13 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
           >
             🔐 Mode Admin
           </button>
+          <button
+            className="btn-secondary"
+            onClick={openBdcModal}
+            style={{background: "#5e35b1", color: "#fff", fontWeight: 700, padding: 14, marginTop: 8}}
+          >
+            📋 Charger un BDC depuis Drive
+          </button>
         </div>
       )}
 
@@ -851,6 +1002,95 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
       {!firebaseReady && (
         <div style={{fontSize: 11, color: "#999", marginTop: 16, textAlign: "center", maxWidth: 360}}>
           ⚠️ Firebase non configuré. Mode local uniquement (pas de partage temps réel).
+        </div>
+      )}
+
+      {/* Modal de chargement BDC */}
+      {showBdcModal && (
+        <div className="modal-backdrop" onClick={() => !loadingBdcId && setShowBdcModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{maxWidth: 500}}>
+            <h3>📋 Charger un BDC depuis Drive</h3>
+            <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
+              BDC des 3 derniers jours dans le dossier Drive Kelbongoo.
+            </p>
+
+            <div className="field">
+              <label>Nom du fournisseur *</label>
+              <input
+                type="text"
+                value={bdcSupplier}
+                onChange={(e) => { setBdcSupplier(e.target.value); setBdcError(""); }}
+                placeholder="Ex: LE FLEURY"
+                style={{textTransform: "uppercase"}}
+              />
+            </div>
+
+            {bdcLoading && (
+              <div style={{textAlign: "center", padding: 20, color: "#666"}}>
+                Chargement de la liste...
+              </div>
+            )}
+
+            {!bdcLoading && bdcList.length > 0 && (
+              <div style={{maxHeight: 400, overflowY: "auto", marginBottom: 12}}>
+                {bdcList.map(bdc => (
+                  <button
+                    key={bdc.id}
+                    onClick={() => loadBdc(bdc)}
+                    disabled={loadingBdcId !== null}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: 12,
+                      marginBottom: 6,
+                      background: loadingBdcId === bdc.id ? "#e8f5e9" : "#f4f5f7",
+                      border: "1.5px solid " + (loadingBdcId === bdc.id ? "#1a4d2e" : "#e6e8ec"),
+                      borderRadius: 8,
+                      cursor: loadingBdcId !== null ? "wait" : "pointer",
+                      opacity: loadingBdcId !== null && loadingBdcId !== bdc.id ? 0.5 : 1
+                    }}
+                  >
+                    <div style={{fontWeight: 700, fontSize: 13, marginBottom: 2}}>
+                      {loadingBdcId === bdc.id ? "⏳ " : "📄 "}{bdc.name}
+                    </div>
+                    <div style={{fontSize: 11, color: "#666"}}>
+                      Modifié le {bdc.modifiedStr}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {bdcError && (
+              <div style={{
+                color: "#c62828",
+                background: "#ffebee",
+                padding: 10,
+                borderRadius: 6,
+                fontSize: 12,
+                marginBottom: 12
+              }}>
+                {bdcError}
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button
+                className="btn-cancel"
+                onClick={() => setShowBdcModal(false)}
+                disabled={loadingBdcId !== null}
+              >
+                Annuler
+              </button>
+              <button
+                className="btn-confirm"
+                onClick={openBdcModal}
+                disabled={bdcLoading || loadingBdcId !== null}
+              >
+                🔄 Actualiser
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
