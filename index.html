@@ -1,2846 +1,1371 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Kelbongoo - Dispatch Palette</title>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kelbongoo – Prédiction Commandes Fournisseurs</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-
-<!-- Firebase (compat builds, comme l'app prep) -->
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body {
-    margin: 0; padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #f4f5f7;
-    color: #1a1a1a;
-    overscroll-behavior: none;
-  }
-  button { font-family: inherit; cursor: pointer; border: none; }
-  input { font-family: inherit; }
-
-  .app { max-width: 900px; margin: 0 auto; min-height: 100vh; background: #fff; }
-
-  /* Header */
-  .header {
-    position: sticky; top: 0; z-index: 10;
-    background: #1a4d2e;
-    color: #fff;
-    padding: 12px 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.1);
-  }
-  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .3px; }
-  .header .sub { font-size: 12px; opacity: .85; margin-top: 2px; }
-  .header-actions { display: flex; gap: 8px; }
-  .header-btn {
-    background: rgba(255,255,255,.15);
-    color: #fff; padding: 6px 12px; border-radius: 6px;
-    font-size: 13px; font-weight: 600;
-  }
-  .header-btn:active { background: rgba(255,255,255,.3); }
-
-  /* Login / Upload screens */
-  .screen-center {
-    min-height: 100vh; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; padding: 24px;
-  }
-  .logo {
-    font-size: 28px; font-weight: 800; color: #1a4d2e;
-    margin-bottom: 8px; letter-spacing: -.5px;
-  }
-  .tag { color: #666; font-size: 14px; margin-bottom: 32px; }
-  .card {
-    width: 100%; max-width: 360px;
-    background: #fff; border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.08);
-    padding: 24px;
-  }
-  .field { margin-bottom: 16px; }
-  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #555; }
-  .field input, .field select {
-    width: 100%; padding: 12px; font-size: 16px;
-    border: 1.5px solid #ddd; border-radius: 8px; background: #fff;
-  }
-  .field input:focus, .field select:focus { outline: none; border-color: #1a4d2e; }
-  .btn-primary {
-    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
-    background: #1a4d2e; color: #fff; border-radius: 8px;
-    transition: background .15s;
-  }
-  .btn-primary:active { background: #0d3d20; }
-  .btn-primary:disabled { background: #aaa; }
-  .btn-secondary {
-    width: 100%; padding: 12px; font-size: 14px; font-weight: 600;
-    background: #f0f0f0; color: #333; border-radius: 8px;
-    margin-top: 8px;
-  }
-
-  /* Upload */
-  .upload-zone {
-    border: 2px dashed #1a4d2e; border-radius: 12px;
-    padding: 32px 16px; text-align: center;
-    background: #f4f9f5; cursor: pointer;
-  }
-  .upload-zone:active { background: #e6f1ea; }
-  .upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
-  .upload-zone .label { font-weight: 600; color: #1a4d2e; }
-  .upload-zone .hint { font-size: 12px; color: #666; margin-top: 4px; }
-
-  /* Progress bar */
-  .progress-bar {
-    background: #e6e8ec; height: 6px; border-radius: 3px; overflow: hidden;
-    margin-top: 8px;
-  }
-  .progress-fill {
-    height: 100%; background: #4caf50;
-    transition: width .3s ease;
-  }
-  .progress-text {
-    display: flex; justify-content: space-between;
-    font-size: 12px; color: #666; margin-top: 4px;
-  }
-
-  /* Product list */
-  .product-list { padding: 8px; padding-bottom: 100px; }
-  .product-card {
-    background: #fff; border: 1.5px solid #e6e8ec;
-    border-radius: 10px; padding: 12px; margin-bottom: 8px;
-    transition: all .2s;
-  }
-  .product-card.locked {
-    background: #fff8e1; border-color: #ffb300;
-  }
-  .product-card.mine {
-    background: #e8f5e9; border-color: #1a4d2e;
-    box-shadow: 0 0 0 2px rgba(26, 77, 46, 0.15);
-  }
-  .product-card.done {
-    background: #e8f5e9; border-color: #4caf50; opacity: .7;
-  }
-  .product-card.done .designation { text-decoration: line-through; color: #555; }
-
-  .designation {
-    font-size: 14px; font-weight: 600;
-    line-height: 1.3; margin-bottom: 6px;
-  }
-  .product-meta {
-    font-size: 11px; color: #777; margin-bottom: 8px;
-    display: flex; gap: 8px; flex-wrap: wrap;
-  }
-  .product-meta .article { font-family: monospace; }
-  .product-meta .recu { color: #1a4d2e; font-weight: 600; }
-
-  .dest-row {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 6px; margin-bottom: 8px;
-  }
-  .dest-cell {
-    background: #f4f5f7; border-radius: 6px;
-    padding: 8px 4px; text-align: center;
-  }
-  .dest-cell .name { font-size: 10px; font-weight: 700; color: #666; letter-spacing: .5px; }
-  .dest-cell .qty { font-size: 20px; font-weight: 800; color: #1a4d2e; margin-top: 2px; }
-  .dest-cell .qty.zero { color: #ccc; }
-
-  .actions-row { display: flex; gap: 6px; }
-  .btn-validate {
-    flex: 1; padding: 12px; font-size: 14px; font-weight: 700;
-    background: #1a4d2e; color: #fff; border-radius: 8px;
-  }
-  .btn-validate:active { background: #0d3d20; }
-  .btn-edit {
-    padding: 12px 14px; font-size: 14px;
-    background: #f0f0f0; color: #555; border-radius: 8px;
-  }
-  .btn-undo {
-    flex: 1; padding: 10px; font-size: 13px; font-weight: 600;
-    background: #fff; color: #4caf50; border: 1.5px solid #4caf50; border-radius: 8px;
-  }
-
-  .lock-badge {
-    background: #ffb300; color: #fff;
-    font-size: 11px; font-weight: 700;
-    padding: 3px 8px; border-radius: 10px;
-    display: inline-block; margin-bottom: 6px;
-  }
-  .done-badge {
-    background: #4caf50; color: #fff;
-    font-size: 11px; font-weight: 700;
-    padding: 3px 8px; border-radius: 10px;
-    display: inline-block; margin-bottom: 6px;
-  }
-  .timestamp {
-    font-size: 10px; color: #888; font-weight: 500;
-  }
-
-  /* Search bar */
-  .search-bar {
-    position: sticky; top: 64px; z-index: 5;
-    background: #fff; padding: 8px 12px;
-    border-bottom: 1px solid #e6e8ec;
-  }
-  .search-bar input {
-    width: 100%; padding: 10px 12px; font-size: 15px;
-    border: 1.5px solid #ddd; border-radius: 8px;
-  }
-  .search-bar input:focus { outline: none; border-color: #1a4d2e; }
-
-  /* Tabs */
-  .tabs-bar {
-    display: flex;
-    background: #fff;
-    border-bottom: 1px solid #e6e8ec;
-    position: sticky; top: 64px; z-index: 6;
-  }
-  .tab {
-    flex: 1;
-    padding: 12px 8px;
-    background: transparent;
-    color: #777;
-    font-size: 13px;
-    font-weight: 600;
-    border-bottom: 3px solid transparent;
-    transition: all .15s;
-  }
-  .tab.active {
-    color: #1a4d2e;
-    border-bottom-color: #1a4d2e;
-    background: #f4f9f5;
-  }
-  .tab:active { background: #e6f1ea; }
-
-  /* Mode scan */
-  .scan-mode {
-    padding: 16px;
-    padding-bottom: 100px;
-    min-height: calc(100vh - 200px);
-  }
-  .scan-search-wrap {
-    position: relative;
-    margin-bottom: 16px;
-  }
-  .scan-search-input {
-    width: 100%;
-    padding: 20px 50px 20px 20px;
-    font-size: 28px;
-    font-weight: 700;
-    text-align: center;
-    border: 3px solid #1a4d2e;
-    border-radius: 16px;
-    background: #fff;
-    text-transform: lowercase;
-    letter-spacing: 2px;
-  }
-  .scan-search-input:focus {
-    outline: none;
-    box-shadow: 0 0 0 4px rgba(26, 77, 46, 0.15);
-  }
-  .scan-search-input::placeholder {
-    color: #ccc;
-    font-weight: 500;
-    letter-spacing: normal;
-    font-size: 18px;
-  }
-  .scan-clear {
-    position: absolute;
-    right: 12px; top: 50%;
-    transform: translateY(-50%);
-    width: 36px; height: 36px;
-    background: #f0f0f0;
-    border-radius: 50%;
-    font-size: 16px;
-    color: #555;
-  }
-  .scan-hint {
-    text-align: center;
-    padding: 40px 20px;
-    color: #555;
-  }
-  .scan-results {
-    /* Cartes plus grandes en mode scan */
-  }
-  .scan-results .product-card {
-    padding: 16px;
-    margin-bottom: 12px;
-  }
-  .scan-results .designation {
-    font-size: 16px;
-  }
-  .scan-results .dest-cell .qty {
-    font-size: 24px;
-  }
-  .scan-results .btn-validate {
-    padding: 16px;
-    font-size: 16px;
-  }
-
-  /* Bottom action bar */
-  .bottom-bar {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: #fff; border-top: 1px solid #e6e8ec;
-    padding: 12px 16px; box-shadow: 0 -2px 8px rgba(0,0,0,.06);
-    z-index: 10;
-  }
-  .bottom-bar .stats {
-    display: flex; justify-content: space-between;
-    font-size: 12px; color: #666; margin-bottom: 8px;
-  }
-  .btn-finish {
-    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
-    background: #4caf50; color: #fff; border-radius: 8px;
-  }
-  .btn-finish:disabled { background: #aaa; }
-
-  /* Modal */
-  .modal-backdrop {
-    position: fixed; inset: 0; background: rgba(0,0,0,.5);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 100; padding: 16px;
-  }
-  .modal {
-    background: #fff; border-radius: 12px; padding: 20px;
-    width: 100%; max-width: 360px;
-    max-height: 90vh; overflow-y: auto;
-  }
-  .modal h3 { margin: 0 0 12px 0; font-size: 16px; }
-  .modal .designation-modal { font-size: 13px; color: #555; margin-bottom: 16px; }
-  .edit-grid {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 8px; margin-bottom: 16px;
-  }
-  .edit-cell label { font-size: 11px; font-weight: 700; color: #666; }
-  .edit-cell input {
-    width: 100%; padding: 10px; font-size: 18px; font-weight: 700;
-    text-align: center; border: 1.5px solid #ddd; border-radius: 6px;
-    margin-top: 4px;
-  }
-  .modal-actions { display: flex; gap: 8px; }
-  .modal-actions button { flex: 1; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 14px; }
-  .btn-cancel { background: #f0f0f0; color: #555; }
-  .btn-confirm { background: #1a4d2e; color: #fff; }
-
-  /* Recap */
-  .recap-section { padding: 16px; padding-bottom: 100px; }
-  .recap-card {
-    background: #fff; border-radius: 12px;
-    padding: 16px; margin-bottom: 12px;
-    box-shadow: 0 2px 6px rgba(0,0,0,.05);
-  }
-  .recap-card h3 { margin: 0 0 12px 0; font-size: 15px; }
-  .recap-stat {
-    display: flex; justify-content: space-between;
-    padding: 6px 0; border-bottom: 1px solid #f0f0f0;
-    font-size: 13px;
-  }
-  .recap-stat:last-child { border-bottom: none; }
-  .recap-stat .label { color: #666; }
-  .recap-stat .value { font-weight: 700; color: #1a4d2e; }
-
-  .anomaly-item {
-    padding: 10px; border-radius: 6px;
-    background: #fff3e0; border-left: 3px solid #ff9800;
-    font-size: 12px; margin-bottom: 6px;
-  }
-  .anomaly-item .product { font-weight: 600; }
-  .anomaly-item .detail { color: #666; margin-top: 2px; }
-
-  /* Toast */
-  .toast {
-    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
-    background: #333; color: #fff; padding: 10px 16px;
-    border-radius: 8px; font-size: 13px; z-index: 200;
-    box-shadow: 0 4px 12px rgba(0,0,0,.2);
-  }
-
-  /* Connection status */
-  .conn-status {
-    font-size: 11px; padding: 2px 8px; border-radius: 10px;
-    background: rgba(255,255,255,.2);
-  }
-  .conn-status.offline { background: #d32f2f; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f7fa;color:#1a202c;line-height:1.5}
+  .container{max-width:1500px;margin:0 auto;padding:16px}
+  h1{font-size:22px;margin-bottom:4px;color:#2d3748}
+  .subtitle{color:#718096;font-size:13px;margin-bottom:16px}
+  .card{background:white;border-radius:8px;padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .btn{background:#3182ce;color:white;border:none;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:14px;font-weight:500;transition:background .15s}
+  .btn:hover{background:#2c5aa0}
+  .btn:disabled{background:#cbd5e0;cursor:not-allowed}
+  .btn-secondary{background:#e2e8f0;color:#2d3748}
+  .btn-secondary:hover{background:#cbd5e0}
+  .btn-success{background:#38a169}
+  .btn-success:hover{background:#2f855a}
+  .btn-warn{background:#dd6b20}
+  .btn-warn:hover{background:#c05621}
+  .btn-sm{padding:6px 10px;font-size:12px}
+  input,select,textarea{font-family:inherit;font-size:14px;padding:8px 10px;border:1px solid #cbd5e0;border-radius:6px;width:100%}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:#3182ce;box-shadow:0 0 0 3px rgba(49,130,206,.15)}
+  label{display:block;font-size:13px;font-weight:500;color:#4a5568;margin-bottom:4px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .col{flex:1;min-width:200px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #e2e8f0;vertical-align:middle}
+  th{background:#f7fafc;font-weight:600;color:#4a5568;font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+  tr:hover{background:#f7fafc}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .pill-blue{background:#bee3f8;color:#2c5282}
+  .pill-green{background:#c6f6d5;color:#22543d}
+  .pill-orange{background:#feebc8;color:#7c2d12}
+  .pill-red{background:#fed7d7;color:#742a2a}
+  .pill-gray{background:#e2e8f0;color:#4a5568}
+  .scenario-box{border:2px solid transparent;border-radius:6px;padding:6px;cursor:pointer;transition:all .15s;text-align:center}
+  .scenario-box:hover{background:#edf2f7}
+  .scenario-box.selected{border-color:#3182ce;background:#ebf8ff}
+  .qty-input{width:60px!important;text-align:center;font-weight:600;font-size:14px}
+  .alert{padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:13px}
+  .alert-info{background:#bee3f8;color:#2c5282}
+  .alert-warn{background:#feebc8;color:#7c2d12}
+  .alert-error{background:#fed7d7;color:#742a2a}
+  .alert-success{background:#c6f6d5;color:#22543d}
+  .loader{display:inline-block;width:14px;height:14px;border:2px solid #cbd5e0;border-top-color:#3182ce;border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .small{font-size:11px;color:#718096}
+  .step{font-weight:600;color:#3182ce;margin-bottom:10px;font-size:14px}
+  .badge{display:inline-block;padding:2px 6px;border-radius:4px;background:#edf2f7;font-size:11px;font-weight:500;color:#4a5568}
+  .tab-row{display:flex;gap:4px;border-bottom:2px solid #e2e8f0;margin-bottom:12px;overflow-x:auto}
+  .tab{padding:6px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;font-size:13px;font-weight:500;color:#718096;white-space:nowrap}
+  .tab.active{color:#3182ce;border-bottom-color:#3182ce}
+  code{background:#edf2f7;padding:2px 6px;border-radius:3px;font-size:12px;font-family:'SF Mono',Menlo,monospace}
+  .data-status{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-top:8px}
+  .data-status>div{display:flex;align-items:center;gap:6px}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .dot-ok{background:#38a169}.dot-err{background:#e53e3e}.dot-load{background:#dd6b20}
+  .config-panel{background:#fffaf0;border:1px solid #feebc8;padding:14px;border-radius:6px;margin-bottom:14px}
+  .qty-cell{min-width:75px}
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  /* Modale */
+  .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px}
+  .modal-box{background:white;border-radius:8px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;padding:20px}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid #e2e8f0;padding-bottom:12px}
+  .modal-title{font-size:16px;font-weight:600;color:#2d3748}
+  .modal-close{background:none;border:none;font-size:24px;cursor:pointer;color:#718096;padding:0;width:32px;height:32px}
+  .modal-close:hover{color:#1a202c}
+  .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;border-top:1px solid #e2e8f0;padding-top:12px;flex-wrap:wrap}
+  .radio-group{display:flex;gap:12px;flex-wrap:wrap}
+  .radio-group label{display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;margin:0}
+  /* Expand box (pour le détail prédiction) */
+  .expand-box{background:#f7fafc;border-left:3px solid #3182ce;padding:12px 14px;margin:6px 0;border-radius:0 4px 4px 0;font-size:12px}
+  .expand-section{margin-bottom:10px}
+  .expand-section:last-child{margin-bottom:0}
+  .expand-section strong{color:#2d3748;display:block;margin-bottom:4px;font-size:12px}
+  .expand-row{padding:2px 0;color:#4a5568;font-size:12px}
+  .expand-row .num{display:inline-block;min-width:50px;font-weight:600}
 </style>
 </head>
 <body>
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useEffect, useMemo, useRef, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
-/* =========================================================================
-   CONFIGURATION
-   ========================================================================= */
+const DEFAULT_APPS_SCRIPT_URL = localStorage.getItem('kbg_apps_script_url') || '';
 
-// Firebase config - projet kelbongoo-prep (app Dispatch)
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyDtcoRoknYM4JrJJfcuhpnVMeS-OurwYdU",
-  authDomain: "kelbongoo-prep.firebaseapp.com",
-  databaseURL: "https://kelbongoo-prep-default-rtdb.firebaseio.com",
-  projectId: "kelbongoo-prep",
-  storageBucket: "kelbongoo-prep.firebasestorage.app",
-  messagingSenderId: "596701505006",
-  appId: "1:596701505006:web:3f2f8d3f0f43ca828e5aff"
-};
+const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const fmtFR = (d) => d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+const todayStr = () => fmtDate(new Date());
+const normalizeName = (s) => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+const fuzzyMatch = (a,b) => { const na=normalizeName(a), nb=normalizeName(b); if(!na||!nb) return false; return na===nb||na.includes(nb)||nb.includes(na); };
 
-// URL Apps Script pour envoi du récap (Kelbongoo Distribution Proxy)
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj8BOPRY7V_Ni_0a-6YmNA-1HyRAcf0QXAL1FMy04Xnp1W4Am-cNuR4poQOHzu4VCL4Q/exec";
-
-// Durée de verrouillage d'une ligne (ms) - 30s sans renouvellement = auto-déverrouillage
-const LOCK_DURATION_MS = 30000;
-const LOCK_REFRESH_MS = 10000;
-
-// Liste des opérateurs ayant accès au mode Admin (case-insensitive)
-const ADMIN_NAMES = ["henry", "raimbaud"];
-const isAdmin = (name) => ADMIN_NAMES.includes((name||"").toLowerCase().trim());
-
-// Init Firebase
-let db = null;
-let firebaseReady = false;
-try {
-  firebase.initializeApp(FIREBASE_CONFIG);
-  db = firebase.database();
-  firebaseReady = true;
-} catch(e) { console.error("Firebase init failed", e); }
-
-/* =========================================================================
-   HELPERS
-   ========================================================================= */
-
-const fmtTime = (ts) => {
-  if (!ts) return "";
-  const d = new Date(ts);
-  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-};
-
-const fmtDuration = (ms) => {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
-  if (h > 0) return `${h}h${(m%60).toString().padStart(2,"0")}`;
-  if (m > 0) return `${m}min ${s%60}s`;
-  return `${s}s`;
-};
-
-const stripAccents = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-// Identifiant stable pour une ligne (basé sur le code article + index pour les cas sans code)
-const productKey = (p, idx) => {
-  const code = (p.article || "").toString().trim();
-  if (code) return `a_${code}`;
-  return `l_${idx}`;
-};
-
-/* =========================================================================
-   EXCEL PARSING
-   ========================================================================= */
-
-// Normalise un nom de colonne pour le matching (sans accents, lowercase, trim)
-const normCol = (s) => stripAccents((s||"").toString()).toLowerCase().trim();
-
-// Mapping des codes magasin G5 vers nos noms
-// Magasin 01 = ROB, Magasin 03 = TOL, Magasin 98 = PDP
-const G5_STORE_MAP = {
-  "01": "rob",
-  "03": "tol",
-  "98": "pdp"
-};
-
-// Parse une cellule G5 qui peut être au format "07-1-59 ||| 36.000000"
-// Retourne le nombre après les ||| ou simplement la valeur si pas de ||| .
-const parseG5Cell = (v) => {
-  if (v === "" || v === null || v === undefined) return 0;
-  const s = v.toString().trim();
-  // Format G5 : "XX-Y-ZZZ ||| nombre.000000"
-  // On peut avoir plusieurs ||| (ex: "98 ||| 98-1-0000000008 ||| 36.000000")
-  // → on prend toujours ce qui est après le DERNIER |||
-  const lastSep = s.lastIndexOf("|||");
-  let numStr = lastSep >= 0 ? s.substring(lastSep + 3).trim() : s;
-  // Format "12u = 2.798000" (autre ancien format) → 12
-  const um = numStr.match(/^(\d+)\s*u/);
-  if (um) return parseInt(um[1], 10);
-  const n = parseFloat(numStr);
-  return isNaN(n) ? 0 : Math.round(n); // arrondit (36.000000 -> 36)
-};
-
-// Détecte la structure du fichier en cherchant la ligne d'en-têtes
-function parseExcelFile(workbook) {
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-
-  // Fonction helper : détecte si une cellule d'en-tête correspond à un magasin
-  // Reconnait: "ROB", "TOL", "PDP" exacts
-  //            "Magasin 01/03/98"
-  //            "Commande ROB", "Cmd ROB", "ROB Commande", etc.
-  const detectStore = (cellNorm) => {
-    if (!cellNorm) return null;
-    // Match exact
-    if (cellNorm === "rob") return "rob";
-    if (cellNorm === "tol") return "tol";
-    if (cellNorm === "pdp") return "pdp";
-    // Magasin XX
-    if (cellNorm.startsWith("magasin")) {
-      const code = cellNorm.replace("magasin", "").trim();
-      if (G5_STORE_MAP[code]) return G5_STORE_MAP[code];
-      return null;
-    }
-    // Mot ROB/TOL/PDP isolé dans un libellé "Commande ROB", "Cmd TOL", "Cde PDP", etc.
-    // On split par espaces, tirets, parenthèses
-    const tokens = cellNorm.split(/[\s\-_()\/]+/).filter(Boolean);
-    if (tokens.includes("rob")) return "rob";
-    if (tokens.includes("tol")) return "tol";
-    if (tokens.includes("pdp")) return "pdp";
-    return null;
-  };
-
-  // Cherche la ligne d'en-têtes
-  let headerIdx = -1;
-  let headers = null;
-  for (let i = 0; i < Math.min(rows.length, 20); i++) {
-    const row = rows[i].map(c => normCol(c));
-    // Une ligne d'en-têtes contient au moins une colonne désignation/produit
-    // Les colonnes magasin sont optionnelles (si absentes -> tout va vers PDP)
-    const hasDesig = row.some(c => c.includes("designation") || c === "produit" || c === "libelle" || c === "libellé");
-    if (hasDesig) {
-      headerIdx = i;
-      headers = rows[i];
-      break;
-    }
+const callApi = async (url, action, params = {}) => {
+  if (!url) throw new Error("URL Apps Script non configurée");
+  if (action === 'init' || action === 'ping' || action === 'get_learnings') {
+    const r = await fetch(`${url}?action=${action}`, { method: 'GET', redirect: 'follow' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
   }
-  if (headerIdx === -1) {
-    throw new Error("Impossible de trouver une colonne désignation/produit dans le fichier.");
-  }
-
-  // Détection de colonne "quantité" générique pour les BDC sans magasin
-  // Cherche une colonne nommée "quantité", "qte", "qty", "uvc" (unité commande)
-  const detectQuantity = (cellNorm) => {
-    if (!cellNorm) return false;
-    if (cellNorm === "quantite" || cellNorm === "qte" || cellNorm === "qty") return true;
-    if (cellNorm === "commande" || cellNorm === "commande en uvc") return true;
-    // Colonnes type "Commande" sans magasin spécifique
-    return false;
-  };
-
-  // Map des colonnes
-  const colMap = {};
-  let isG5Format = false;
-  let quantityColIdx = -1; // Colonne quantité générique (fallback si pas de magasins)
-
-  headers.forEach((h, idx) => {
-    const n = normCol(h);
-    if (!n) return;
-
-    // Code article : "article", "code article", "code", "réf", "reference"
-    if (n === "article" || n === "code article" || n === "code" || n === "ref" || n === "reference") {
-      if (colMap.article === undefined) colMap.article = idx;
-    }
-    // Désignation : "désignation", "produit", "libellé", "nom"
-    else if (n.includes("designation") || n === "produit" || n === "libelle" || n === "libellé" || n === "nom") {
-      if (colMap.designation === undefined) colMap.designation = idx;
-    }
-    // Commande : "cmd", "commande", "quantité commandée"
-    // Attention : "Commande PDP" doit aller dans les magasins, pas la commande globale
-    else if (detectStore(n) === null && (n.includes("cmd") || n === "commande" || (n.includes("commande") && !detectStore(n)))) {
-      if (colMap.cmd === undefined) colMap.cmd = idx;
-    }
-    // Réception : "réceptionnées", "reçu", "reception"
-    else if (n.includes("recept") || n.includes("recu") || n === "reçu") {
-      if (colMap.recue === undefined) colMap.recue = idx;
-    }
-    // Magasins
-    else {
-      const store = detectStore(n);
-      if (store) {
-        colMap[store] = idx;
-        if (n.startsWith("magasin")) isG5Format = true;
-      }
-    }
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action, ...params }),
+    redirect: 'follow',
   });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+};
 
-  // Si pas de magasins détectés → on cherche une colonne "quantité" générique
-  // qu'on attribuera à PDP par défaut
-  const hasAnyStore = colMap.rob !== undefined || colMap.tol !== undefined || colMap.pdp !== undefined;
-  if (!hasAnyStore) {
-    headers.forEach((h, idx) => {
-      const n = normCol(h);
-      if (!n) return;
-      if (idx === colMap.article || idx === colMap.designation ||
-          idx === colMap.cmd || idx === colMap.recue) return;
-      // Cherche colonne quantité/qte/uvc/commande
-      if (quantityColIdx === -1 && (
-        n === "quantite" || n === "qte" || n === "qty" ||
-        n === "commande en uvc" || n === "uvc" || n === "uc" ||
-        (n.includes("quantite") && !n.includes("recept")) ||
-        (n.includes("commande") && !detectStore(n))
-      )) {
-        quantityColIdx = idx;
-      }
-    });
-    // Si on trouve une quantité, on l'utilise pour PDP
-    if (quantityColIdx !== -1) {
-      colMap.pdp = quantityColIdx;
-    }
-    // Sinon, si on a une colonne "commande" (cmd détecté plus haut), on l'utilise pour PDP
-    else if (colMap.cmd !== undefined) {
-      colMap.pdp = colMap.cmd;
-    }
-  }
-
-  // Si on n'a pas trouvé de désignation, c'est qu'il y a un problème
-  if (colMap.designation === undefined) {
-    throw new Error("Impossible de trouver une colonne désignation/produit dans le fichier.");
-  }
-
-  // Vérifie qu'on a au moins UNE source de quantité (un magasin OU une quantité)
-  if (colMap.rob === undefined && colMap.tol === undefined && colMap.pdp === undefined) {
-    throw new Error("Aucune colonne de quantité trouvée. Ajoute une colonne 'Quantité', 'ROB', 'TOL' ou 'PDP'.");
-  }
-
-  // Parse les lignes produit
-  const products = [];
-  for (let i = headerIdx + 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.every(c => c === "" || c === null || c === undefined)) continue;
-
-    const designation = (row[colMap.designation] || "").toString().trim();
-    if (!designation) continue;
-
-    // Ignore les lignes de totaux (montant ht, montant ttc, tva, etc.)
-    const desigLower = stripAccents(designation.toLowerCase());
-    if (desigLower.includes("montant ht") ||
-        desigLower.includes("montant ttc") ||
-        desigLower.includes("montant tva") ||
-        desigLower === "total" ||
-        desigLower === "totaux") {
-      continue;
-    }
-
-    // Parser adapté au format
-    const parse = isG5Format ? parseG5Cell : (v) => {
-      if (v === "" || v === null || v === undefined) return 0;
-      const s = v.toString().trim();
-      const m = s.match(/^(\d+)\s*u/);
-      if (m) return parseInt(m[1], 10);
-      // Gère aussi les nombres avec virgule décimale française "1,5"
-      const cleaned = s.replace(",", ".");
-      const n = parseFloat(cleaned);
-      return isNaN(n) ? 0 : Math.round(n);
-    };
-
-    const rob = colMap.rob !== undefined ? parse(row[colMap.rob]) : 0;
-    const tol = colMap.tol !== undefined ? parse(row[colMap.tol]) : 0;
-    const pdp = colMap.pdp !== undefined ? parse(row[colMap.pdp]) : 0;
-
-    // Si la quantité reçue n'est pas dans le fichier (cas BDC),
-    // on la déduit de la somme des magasins
-    let recue;
-    if (colMap.recue !== undefined) {
-      recue = parse(row[colMap.recue]);
-    } else {
-      recue = rob + tol + pdp;
-    }
-
-    // Si la commande n'est pas dans le fichier, on prend la reçue par défaut
-    let cmd;
-    if (colMap.cmd !== undefined) {
-      cmd = parse(row[colMap.cmd]);
-    } else {
-      cmd = recue;
-    }
-
-    // On n'ajoute pas les lignes où tous les magasins sont à 0 (lignes vides ou non commandées)
-    if (rob === 0 && tol === 0 && pdp === 0 && recue === 0) continue;
-
-    products.push({
-      article: colMap.article !== undefined ? (row[colMap.article] || "").toString().trim() : "",
-      designation,
-      cmd,
-      recue,
-      rob,
-      tol,
-      pdp
-    });
-  }
-
-  return products;
-}
-
-/* =========================================================================
-   FIREBASE / STATE SYNC
-   ========================================================================= */
-
-// Une session = un dispatch en cours, identifiée par un sessionId
-// Structure dans Firebase:
-//   /dispatch/{sessionId}/meta : { supplier, startedAt, operators: [...], products: [...] }
-//   /dispatch/{sessionId}/state/{productKey} : { done, doneBy, doneAt, lockedBy, lockedAt, qtyRob, qtyTol, qtyPdp }
-
-function useFirebaseSession(sessionId, operatorName) {
-  const [state, setState] = useState({});
-  const [meta, setMeta] = useState(null);
-  const [connected, setConnected] = useState(false);
-
-  useEffect(() => {
-    if (!firebaseReady || !sessionId) return;
-
-    const stateRef = db.ref(`dispatch/${sessionId}/state`);
-    const metaRef = db.ref(`dispatch/${sessionId}/meta`);
-    const connectedRef = db.ref(".info/connected");
-
-    const onState = (snap) => setState(snap.val() || {});
-    const onMeta = (snap) => setMeta(snap.val() || null);
-    const onConn = (snap) => setConnected(!!snap.val());
-
-    stateRef.on("value", onState);
-    metaRef.on("value", onMeta);
-    connectedRef.on("value", onConn);
-
-    return () => {
-      stateRef.off("value", onState);
-      metaRef.off("value", onMeta);
-      connectedRef.off("value", onConn);
-    };
-  }, [sessionId]);
-
-  // Mise à jour locale (fallback si pas Firebase)
-  const updateLocal = useCallback((key, patch) => {
-    setState(prev => ({ ...prev, [key]: { ...(prev[key] || {}), ...patch } }));
-  }, []);
-
-  const lockRow = useCallback((key) => {
-    const patch = { lockedBy: operatorName, lockedAt: Date.now() };
-    if (firebaseReady && sessionId) {
-      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
-    } else {
-      updateLocal(key, patch);
-    }
-  }, [sessionId, operatorName, updateLocal]);
-
-  const unlockRow = useCallback((key) => {
-    const patch = { lockedBy: null, lockedAt: null };
-    if (firebaseReady && sessionId) {
-      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
-    } else {
-      updateLocal(key, patch);
-    }
-  }, [sessionId, updateLocal]);
-
-  const validateRow = useCallback((key, qtys) => {
-    const patch = {
-      done: true,
-      doneBy: operatorName,
-      doneAt: Date.now(),
-      lockedBy: null,
-      lockedAt: null,
-      ...(qtys || {})
-    };
-    if (firebaseReady && sessionId) {
-      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
-    } else {
-      updateLocal(key, patch);
-    }
-  }, [sessionId, operatorName, updateLocal]);
-
-  const undoRow = useCallback((key) => {
-    const patch = { done: false, doneBy: null, doneAt: null };
-    if (firebaseReady && sessionId) {
-      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
-    } else {
-      updateLocal(key, patch);
-    }
-  }, [sessionId, updateLocal]);
-
-  const initSession = useCallback((supplier, products) => {
-    const metaData = {
-      supplier,
-      startedAt: Date.now(),
-      products,
-    };
-    if (firebaseReady && sessionId) {
-      db.ref(`dispatch/${sessionId}/meta`).set(metaData);
-    } else {
-      setMeta(metaData);
-    }
-  }, [sessionId]);
-
-  return { state, meta, connected: firebaseReady ? connected : true, lockRow, unlockRow, validateRow, undoRow, initSession };
-}
-
-/* =========================================================================
-   COMPOSANTS
-   ========================================================================= */
-
-function LoginScreen({ onLogin }) {
-  const [name, setName] = useState(localStorage.getItem("dispatch_operator") || "");
-
-  const submit = () => {
-    if (!name.trim()) return;
-    localStorage.setItem("dispatch_operator", name.trim());
-    onLogin(name.trim());
+// ============================================================
+//                    MOTEUR DE PRÉDICTION
+// ============================================================
+const computeStats = (sales, today, periodDays) => {
+  if (!sales || !sales.length) return { current: 0, prev: 0, avg4: 0, daysCur: 0, periodDays: periodDays };
+  const N = periodDays || 7;
+  const ms = 24 * 3600 * 1000;
+  const toDate = (s) => new Date(s + 'T00:00:00');
+  const startCur = new Date(today.getTime() - N * ms);
+  const startPrev = new Date(today.getTime() - 2 * N * ms);
+  const start4P = new Date(today.getTime() - 4 * N * ms);
+  const inRange = (s, from, to) => { const d = toDate(s.d); return d > from && d <= to; };
+  const cur = sales.filter(s => inRange(s, startCur, today));
+  const prev = sales.filter(s => inRange(s, startPrev, startCur));
+  const last4P = sales.filter(s => inRange(s, start4P, today));
+  const sum = a => a.reduce((s, b) => s + b.q, 0);
+  return {
+    current: sum(cur),
+    prev: sum(prev),
+    avg4: last4P.length ? sum(last4P) / 4 : 0,
+    daysCur: cur.length,
+    periodDays: N,
   };
+};
 
-  return (
-    <div className="screen-center">
-      <div className="logo">Kelbongoo</div>
-      <div className="tag">Dispatch Palette</div>
-      <div className="card">
-        <div className="field">
-          <label>Ton prénom</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ex: Marie"
-            autoFocus
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-          />
-        </div>
-        <button className="btn-primary" onClick={submit} disabled={!name.trim()}>
-          Continuer
+const computeAdjustment = (productId, learnings) => {
+  if (!learnings) return 1.0;
+  const entries = (learnings.entries || []).filter(e => e.productId === productId);
+  if (!entries.length) return 1.0;
+  const recent = entries.slice(-5);
+  const ratios = recent.map(e => {
+    const p = Number(e.proposedMedian) || 0;
+    const v = Number(e.validated) || 0;
+    return p > 0 ? v / p : 1;
+  });
+  return ratios.reduce((a, b) => a + b, 0) / ratios.length;
+};
+
+const buildScenarios = (stats, stock, daysToCover, pcb, adjCoef) => {
+  // stats.current = ventes sur la période courante (N jours)
+  // stats.periodDays = durée de la période
+  // daysToCover = combien de jours il faut couvrir (généralement = periodDays + délai jusqu'à prochaine livraison)
+  const N = stats.periodDays || 7;
+  // Vitesse de vente par jour calendaire
+  const ratePerDay = N > 0 ? stats.current / N : 0;
+  const trend = stats.prev > 0 ? stats.current / stats.prev : 1;
+  const vsAvg = stats.avg4 > 0 ? stats.current / stats.avg4 : 1;
+  
+  // Besoin de base = vitesse × jours à couvrir
+  const baseNeed = ratePerDay * daysToCover;
+  
+  const prudent = baseNeed * 0.9;
+  const median  = baseNeed * 1.05 * adjCoef;
+  const large   = baseNeed * 1.25 * adjCoef;
+  
+  const need = q => Math.max(0, q - stock);
+  const roundPcb = q => pcb > 0 ? Math.ceil(q / pcb) * pcb : Math.ceil(q);
+  
+  return {
+    ratePerDay, trend, vsAvg, baseNeed,
+    scenarios: {
+      prudent: { target: Math.ceil(prudent), need: roundPcb(need(prudent)), label: 'Prudent' },
+      median:  { target: Math.ceil(median),  need: roundPcb(need(median)),  label: 'Médian' },
+      large:   { target: Math.ceil(large),   need: roundPcb(need(large)),   label: 'Large' },
+    }
+  };
+};
+
+const estimateDaysToCover = (cadEntry) => {
+  if (!cadEntry) return 7;
+  const jl = (cadEntry.jourLivraison || '').toLowerCase();
+  if (jl.includes('/') || jl.split(/livraison|pour/).length > 2) return 5;
+  return 7;
+};
+
+// ============================================================
+//                    COMPOSANTS
+// ============================================================
+function ConfigPanel({ apiUrl, setApiUrl, onReload, expanded, setExpanded }) {
+  const [val, setVal] = useState(apiUrl);
+  if (!expanded) {
+    // Affichage discret quand déjà configuré
+    return (
+      <div style={{textAlign:'right',marginBottom:8}}>
+        <button className="btn btn-sm btn-secondary" onClick={() => setExpanded(true)}>
+          ⚙️ Config
         </button>
       </div>
-    </div>
-  );
-}
-
-function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, onLogout }) {
-  const [error, setError] = useState("");
-  const [supplierName, setSupplierName] = useState("");
-  const [pendingFile, setPendingFile] = useState(null);
-  const fileRef = useRef(null);
-
-  // État du chargement BDC depuis Drive
-  const [showBdcModal, setShowBdcModal] = useState(false);
-  const [bdcList, setBdcList] = useState([]);
-  const [bdcLoading, setBdcLoading] = useState(false);
-  const [bdcError, setBdcError] = useState("");
-  const [bdcSupplier, setBdcSupplier] = useState("");
-  const [loadingBdcId, setLoadingBdcId] = useState(null);
-
-  // Vérifie si une session est déjà active (sessions non terminées, peu importe l'âge)
-  const [activeSessions, setActiveSessions] = useState([]);
-  useEffect(() => {
-    if (!firebaseReady) return;
-    const ref = db.ref("dispatch");
-    const handler = (snap) => {
-      const all = snap.val() || {};
-      const recent = [];
-      Object.entries(all).forEach(([sid, s]) => {
-        if (s.meta && s.meta.startedAt) {
-          const total = (s.meta.products || []).length;
-          const done = Object.values(s.state || {}).filter(x => x && x.done).length;
-          // On affiche TOUTES les sessions non terminées (pas de filtre temps)
-          if (done < total) {
-            recent.push({ id: sid, supplier: s.meta.supplier, startedAt: s.meta.startedAt, total, done });
-          }
-        }
-      });
-      recent.sort((a,b) => b.startedAt - a.startedAt);
-      setActiveSessions(recent);
-    };
-    ref.on("value", handler);
-    return () => ref.off("value", handler);
-  }, []);
-
-  // Charge la liste des BDC depuis Apps Script
-  const openBdcModal = async () => {
-    setShowBdcModal(true);
-    setBdcLoading(true);
-    setBdcError("");
-    setBdcList([]);
-    try {
-      // Apps Script avec no-cors ne renvoie pas de réponse lisible, donc on doit utiliser GET
-      const url = `${APPS_SCRIPT_URL}?action=list-bdcs`;
-      const resp = await fetch(url);
-      const data = await resp.json();
-      if (data.success) {
-        setBdcList(data.bdcs || []);
-        if ((data.bdcs || []).length === 0) {
-          setBdcError("Aucun BDC trouvé dans le dossier Drive (modifié dans les 3 derniers jours, nom contenant 'BDC').");
-        }
-      } else {
-        setBdcError(data.error || "Erreur inconnue");
-      }
-    } catch (e) {
-      setBdcError(`Impossible de charger la liste : ${e.message}`);
-    } finally {
-      setBdcLoading(false);
-    }
-  };
-
-  const loadBdc = async (bdc) => {
-    if (!bdcSupplier.trim()) {
-      setBdcError("Indique d'abord le nom du fournisseur (qui apparaîtra sur les BL).");
-      return;
-    }
-    setLoadingBdcId(bdc.id);
-    setBdcError("");
-    try {
-      const url = `${APPS_SCRIPT_URL}?action=get-bdc&fileId=${encodeURIComponent(bdc.id)}`;
-      const resp = await fetch(url);
-      const data = await resp.json();
-      if (!data.success) throw new Error(data.error || "Erreur de chargement du BDC");
-
-      // Construit un workbook compatible avec le parseur existant
-      const ws = XLSX.utils.aoa_to_sheet(data.rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "BDC");
-
-      const products = parseExcelFile(wb);
-      if (products.length === 0) {
-        throw new Error("Aucun produit reconnu dans ce BDC (vérifie les en-têtes de colonnes).");
-      }
-
-      const supplier = bdcSupplier.trim();
-      const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
-      setShowBdcModal(false);
-      setBdcSupplier("");
-      onSessionStart(sessionId, supplier, products);
-    } catch (e) {
-      setBdcError(e.message);
-    } finally {
-      setLoadingBdcId(null);
-    }
-  };
-
-  const handleFileSelected = (file) => {
-    if (!file) return;
-    if (!supplierName.trim()) {
-      setError("Indique d'abord le nom du fournisseur avant de charger le fichier.");
-      // Garde le fichier en mémoire pour quand le nom sera entré
-      setPendingFile(file);
-      return;
-    }
-    processFile(file, supplierName.trim());
-  };
-
-  const processFile = async (file, supplier) => {
-    setError("");
-    try {
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
-      const products = parseExcelFile(wb);
-      if (products.length === 0) {
-        setError("Aucun produit trouvé dans le fichier.");
-        return;
-      }
-      const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
-      onSessionStart(sessionId, supplier, products);
-    } catch (e) {
-      setError(`Erreur de lecture: ${e.message}`);
-    }
-  };
-
-  // Si le user a maintenant entré le nom et qu'on avait un fichier en attente
-  const handleSupplierConfirm = () => {
-    if (!supplierName.trim()) {
-      setError("Le nom du fournisseur est obligatoire.");
-      return;
-    }
-    if (pendingFile) {
-      processFile(pendingFile, supplierName.trim());
-      setPendingFile(null);
-    } else {
-      fileRef.current?.click();
-    }
-  };
-
-  return (
-    <div className="screen-center">
-      <div className="logo">Kelbongoo</div>
-      <div className="tag">Bonjour {operator} 👋</div>
-
-      <div className="card">
-        <h3 style={{margin: "0 0 12px 0", fontSize: 15}}>Démarrer un nouveau dispatch</h3>
-
-        <div className="field">
-          <label>Nom du fournisseur *</label>
-          <input
-            type="text"
-            value={supplierName}
-            onChange={(e) => { setSupplierName(e.target.value); setError(""); }}
-            placeholder="Ex: SYMBIOSE, GABORIT, TERRE D'OC..."
-            style={{textTransform: "uppercase"}}
-          />
-        </div>
-
-        <div
-          className="upload-zone"
-          onClick={() => {
-            if (!supplierName.trim()) {
-              setError("⚠️ Saisis d'abord le nom du fournisseur");
-              return;
-            }
-            fileRef.current?.click();
-          }}
-          style={{opacity: supplierName.trim() ? 1 : 0.5}}
-        >
-          <div className="icon">📥</div>
-          <div className="label">Charger le fichier Excel</div>
-          <div className="hint">.xlsx ou .xls</div>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xlsx,.xls"
-          style={{display: "none"}}
-          onChange={(e) => handleFileSelected(e.target.files[0])}
-        />
-        {error && <div style={{color: "#d32f2f", fontSize: 13, marginTop: 12}}>{error}</div>}
-      </div>
-
-      {activeSessions.length > 0 && (
-        <div className="card" style={{marginTop: 16}}>
-          <h3 style={{margin: "0 0 12px 0", fontSize: 15}}>Rejoindre un dispatch en cours</h3>
-          {activeSessions.map(s => (
-            <button
-              key={s.id}
-              className="btn-secondary"
-              style={{textAlign: "left", padding: 14, marginBottom: 6}}
-              onClick={() => onJoinSession(s.id)}
-            >
-              <div style={{fontWeight: 700, marginBottom: 2}}>{s.supplier}</div>
-              <div style={{fontSize: 11, color: "#666"}}>
-                Démarré à {fmtTime(s.startedAt)} • {s.done}/{s.total} produits faits
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {isAdmin(operator) && (
-        <div style={{marginTop: 16, width: "100%", maxWidth: 360}}>
-          <button
-            className="btn-secondary"
-            onClick={onOpenAdmin}
-            style={{background: "#1a4d2e", color: "#fff", fontWeight: 700, padding: 14}}
-          >
-            🔐 Mode Admin
-          </button>
-          <button
-            className="btn-secondary"
-            onClick={openBdcModal}
-            style={{background: "#5e35b1", color: "#fff", fontWeight: 700, padding: 14, marginTop: 8}}
-          >
-            📋 Charger un BDC depuis Drive
-          </button>
-        </div>
-      )}
-
-      <div style={{marginTop: 12, width: "100%", maxWidth: 360}}>
-        <button
-          className="btn-secondary"
-          onClick={onLogout}
-          style={{fontSize: 13, color: "#666"}}
-        >
-          ↪ Se déconnecter ({operator})
-        </button>
-      </div>
-
-      {!firebaseReady && (
-        <div style={{fontSize: 11, color: "#999", marginTop: 16, textAlign: "center", maxWidth: 360}}>
-          ⚠️ Firebase non configuré. Mode local uniquement (pas de partage temps réel).
-        </div>
-      )}
-
-      {/* Modal de chargement BDC */}
-      {showBdcModal && (
-        <div className="modal-backdrop" onClick={() => !loadingBdcId && setShowBdcModal(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{maxWidth: 500}}>
-            <h3>📋 Charger un BDC depuis Drive</h3>
-            <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
-              BDC des 3 derniers jours dans le dossier Drive Kelbongoo.
-            </p>
-
-            <div className="field">
-              <label>Nom du fournisseur *</label>
-              <input
-                type="text"
-                value={bdcSupplier}
-                onChange={(e) => { setBdcSupplier(e.target.value); setBdcError(""); }}
-                placeholder="Ex: LE FLEURY"
-                style={{textTransform: "uppercase"}}
-              />
-            </div>
-
-            {bdcLoading && (
-              <div style={{textAlign: "center", padding: 20, color: "#666"}}>
-                Chargement de la liste...
-              </div>
-            )}
-
-            {!bdcLoading && bdcList.length > 0 && (
-              <div style={{maxHeight: 400, overflowY: "auto", marginBottom: 12}}>
-                {bdcList.map(bdc => (
-                  <button
-                    key={bdc.id}
-                    onClick={() => loadBdc(bdc)}
-                    disabled={loadingBdcId !== null}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: 12,
-                      marginBottom: 6,
-                      background: loadingBdcId === bdc.id ? "#e8f5e9" : "#f4f5f7",
-                      border: "1.5px solid " + (loadingBdcId === bdc.id ? "#1a4d2e" : "#e6e8ec"),
-                      borderRadius: 8,
-                      cursor: loadingBdcId !== null ? "wait" : "pointer",
-                      opacity: loadingBdcId !== null && loadingBdcId !== bdc.id ? 0.5 : 1
-                    }}
-                  >
-                    <div style={{fontWeight: 700, fontSize: 13, marginBottom: 2}}>
-                      {loadingBdcId === bdc.id ? "⏳ " : "📄 "}{bdc.name}
-                    </div>
-                    <div style={{fontSize: 11, color: "#666"}}>
-                      Modifié le {bdc.modifiedStr}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {bdcError && (
-              <div style={{
-                color: "#c62828",
-                background: "#ffebee",
-                padding: 10,
-                borderRadius: 6,
-                fontSize: 12,
-                marginBottom: 12
-              }}>
-                {bdcError}
-              </div>
-            )}
-
-            <div className="modal-actions">
-              <button
-                className="btn-cancel"
-                onClick={() => setShowBdcModal(false)}
-                disabled={loadingBdcId !== null}
-              >
-                Annuler
-              </button>
-              <button
-                className="btn-confirm"
-                onClick={openBdcModal}
-                disabled={bdcLoading || loadingBdcId !== null}
-              >
-                🔄 Actualiser
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ProductCard({ product, pkey, status, operator, onLock, onUnlock, onValidate, onUndo, onEdit }) {
-  const isLocked = status.lockedBy && status.lockedBy !== operator;
-  const lockExpired = status.lockedAt && (Date.now() - status.lockedAt) > LOCK_DURATION_MS;
-  const reallyLocked = isLocked && !lockExpired;
-  const isDone = status.done;
-  const isMine = status.lockedBy === operator && !lockExpired;
-
-  // Quantités effectives (peuvent avoir été modifiées via le modal)
-  const qtyRob = status.qtyRob !== undefined ? status.qtyRob : product.rob;
-  const qtyTol = status.qtyTol !== undefined ? status.qtyTol : product.tol;
-  const qtyPdp = status.qtyPdp !== undefined ? status.qtyPdp : product.pdp;
-  const recue = status.qtyRecue !== undefined ? status.qtyRecue : product.recue;
-
-  const cls = `product-card ${isDone ? "done" : ""} ${reallyLocked ? "locked" : ""} ${isMine ? "mine" : ""}`;
-
-  // Cliquer sur le nom = "je m'en occupe" / "je le libère"
-  const handleClaim = () => {
-    if (isDone || reallyLocked) return;
-    if (isMine) {
-      onUnlock(pkey);
-    } else {
-      onLock(pkey);
-    }
-  };
-
-  return (
-    <div className={cls}>
-      {reallyLocked && (
-        <div className="lock-badge">🔒 {status.lockedBy} s'en occupe</div>
-      )}
-      {isMine && !isDone && (
-        <div className="lock-badge" style={{background: "#1a4d2e"}}>
-          ✋ Tu t'en occupes (tape à nouveau le nom pour libérer)
-        </div>
-      )}
-      {isDone && (
-        <div className="done-badge">
-          ✓ {status.doneBy} • {fmtTime(status.doneAt)}
-        </div>
-      )}
-
-      <div
-        className="designation"
-        onClick={handleClaim}
-        style={{
-          cursor: (!isDone && !reallyLocked) ? "pointer" : "default",
-          userSelect: "none"
-        }}
-      >
-        {product.designation}
-      </div>
-
-      <div className="product-meta">
-        {product.article && <span className="article">{product.article}</span>}
-        <span className="recu">Reçu: {recue}</span>
-        {!isDone && !reallyLocked && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onEdit(pkey, true); }}
-            style={{
-              background: "#fff3e0", border: "1px solid #ffcc80",
-              borderRadius: 4, padding: "2px 6px", fontSize: 10,
-              color: "#e65100", fontWeight: 700, cursor: "pointer"
-            }}
-          >
-            ✎ Modifier reçu
-          </button>
-        )}
-      </div>
-
-      <div className="dest-row">
-        <div className="dest-cell">
-          <div className="name">ROB</div>
-          <div className={`qty ${qtyRob === 0 ? "zero" : ""}`}>{qtyRob}</div>
-        </div>
-        <div className="dest-cell">
-          <div className="name">TOL</div>
-          <div className={`qty ${qtyTol === 0 ? "zero" : ""}`}>{qtyTol}</div>
-        </div>
-        <div className="dest-cell">
-          <div className="name">PDP</div>
-          <div className={`qty ${qtyPdp === 0 ? "zero" : ""}`}>{qtyPdp}</div>
-        </div>
-      </div>
-
-      {!isDone && !reallyLocked && (
-        <div className="actions-row">
-          <button
-            className="btn-validate"
-            onClick={() => onValidate(pkey, { qtyRob, qtyTol, qtyPdp, qtyRecue: recue })}
-          >
-            ✓ Dispatché
-          </button>
-          <button className="btn-edit" onClick={() => onEdit(pkey, false)}>
-            ✎
-          </button>
-        </div>
-      )}
-
-      {isDone && (
-        <div className="actions-row">
-          <button className="btn-undo" onClick={() => onUndo(pkey)}>
-            Annuler
-          </button>
-        </div>
-      )}
-
-      {reallyLocked && (
-        <div style={{fontSize: 12, color: "#888", textAlign: "center", padding: "8px 0"}}>
-          {status.lockedBy} est en train de s'en occuper...
-        </div>
-      )}
-    </div>
-  );
-}
-
-function EditModal({ product, status, onSave, onClose, allowReceivedEdit }) {
-  // Important: on stocke en string pour gérer le champ vide pendant la saisie
-  const [rob, setRob] = useState(String(status.qtyRob !== undefined ? status.qtyRob : product.rob));
-  const [tol, setTol] = useState(String(status.qtyTol !== undefined ? status.qtyTol : product.tol));
-  const [pdp, setPdp] = useState(String(status.qtyPdp !== undefined ? status.qtyPdp : product.pdp));
-  const [recue, setRecue] = useState(String(status.qtyRecue !== undefined ? status.qtyRecue : product.recue));
-
-  // Convertit string -> nombre (vide = 0)
-  const toNum = (s) => {
-    if (s === "" || s === null || s === undefined) return 0;
-    const n = parseInt(s, 10);
-    return isNaN(n) ? 0 : n;
-  };
-
-  const robN = toNum(rob);
-  const tolN = toNum(tol);
-  const pdpN = toNum(pdp);
-  const recueN = toNum(recue);
-  const total = robN + tolN + pdpN;
-  const gap = total - recueN;
-
-  const handleNumChange = (setter) => (e) => {
-    const v = e.target.value;
-    // Autorise vide, et nombres positifs uniquement
-    if (v === "" || /^\d+$/.test(v)) {
-      setter(v);
-    }
-  };
-
-  const handleSave = () => {
-    onSave({
-      qtyRob: robN,
-      qtyTol: tolN,
-      qtyPdp: pdpN,
-      qtyRecue: recueN
-    });
-  };
-
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Ajuster les quantités</h3>
-        <div className="designation-modal">{product.designation}</div>
-
-        {allowReceivedEdit && (
-          <>
-            <div style={{
-              background: "#fff3e0", padding: 10, borderRadius: 8,
-              marginBottom: 12, border: "1px solid #ffcc80"
-            }}>
-              <div style={{fontSize: 11, fontWeight: 700, color: "#e65100", marginBottom: 4}}>
-                QUANTITÉ REÇUE (BL)
-              </div>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={recue}
-                onChange={handleNumChange(setRecue)}
-                onFocus={(e) => e.target.select()}
-                style={{
-                  width: "100%", padding: 10, fontSize: 22, fontWeight: 700,
-                  textAlign: "center", border: "1.5px solid #ff9800",
-                  borderRadius: 6, background: "#fff"
-                }}
-              />
-              <div style={{fontSize: 10, color: "#666", marginTop: 4, textAlign: "center"}}>
-                Initial: {product.recue}
-              </div>
-            </div>
-          </>
-        )}
-
-        <div style={{fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 6}}>
-          RÉPARTITION PAR MAGASIN
-        </div>
-        <div className="edit-grid">
-          <div className="edit-cell">
-            <label>ROB</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={rob}
-              onChange={handleNumChange(setRob)}
-              onFocus={(e) => e.target.select()}
-            />
-          </div>
-          <div className="edit-cell">
-            <label>TOL</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={tol}
-              onChange={handleNumChange(setTol)}
-              onFocus={(e) => e.target.select()}
-            />
-          </div>
-          <div className="edit-cell">
-            <label>PDP</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={pdp}
-              onChange={handleNumChange(setPdp)}
-              onFocus={(e) => e.target.select()}
-            />
-          </div>
-        </div>
-
-        <div style={{
-          fontSize: 12, marginBottom: 12, textAlign: "center",
-          padding: 8, borderRadius: 6,
-          background: gap === 0 ? "#e8f5e9" : "#ffebee",
-          color: gap === 0 ? "#1a4d2e" : "#c62828",
-          fontWeight: 600
-        }}>
-          Total réparti: {total} / Reçu: {recueN}
-          {gap !== 0 && (
-            <div style={{fontSize: 11, marginTop: 2}}>
-              {gap > 0 ? `⚠️ Surplus de ${gap}` : `⚠️ Manque ${-gap}`}
-            </div>
-          )}
-          {gap === 0 && <div style={{fontSize: 11, marginTop: 2}}>✓ Total cohérent</div>}
-        </div>
-
-        <div className="modal-actions">
-          <button className="btn-cancel" onClick={onClose}>Annuler</button>
-          <button className="btn-confirm" onClick={handleSave}>
-            Valider
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onLeave }) {
-  const { state, meta, connected, lockRow, unlockRow, validateRow, undoRow } = useFirebaseSession(sessionId, operator);
-  const [search, setSearch] = useState("");
-  const [editingKey, setEditingKey] = useState(null);
-  const [toast, setToast] = useState("");
-  const [viewMode, setViewMode] = useState(localStorage.getItem("dispatch_view_mode") || "list"); // "list" | "scan"
-  const [showDone, setShowDone] = useState(false); // onglet Dispatchés
-  const searchInputRef = useRef(null);
-
-  // Sauvegarde le mode choisi
-  useEffect(() => {
-    localStorage.setItem("dispatch_view_mode", viewMode);
-  }, [viewMode]);
-
-  // Renouvelle le lock toutes les 10s sur les lignes que je tiens
-  useEffect(() => {
-    const t = setInterval(() => {
-      Object.entries(state).forEach(([k, v]) => {
-        if (v && v.lockedBy === operator && !v.done) {
-          lockRow(k);
-        }
-      });
-    }, LOCK_REFRESH_MS);
-    return () => clearInterval(t);
-  }, [state, operator, lockRow]);
-
-  // Tri alphabétique
-  const sortedProducts = useMemo(() => {
-    return products
-      .map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }))
-      .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
-  }, [products]);
-
-  // Sépare les produits dispatchés des non dispatchés
-  const { notDoneProducts, doneProducts } = useMemo(() => {
-    const notDone = [];
-    const done = [];
-    sortedProducts.forEach(p => {
-      if (state[p._pkey]?.done) done.push(p);
-      else notDone.push(p);
-    });
-    return { notDoneProducts: notDone, doneProducts: done };
-  }, [sortedProducts, state]);
-
-  // Filtre par recherche selon l'onglet actif
-  const filtered = useMemo(() => {
-    const source = showDone ? doneProducts : notDoneProducts;
-    if (!search.trim()) return source;
-    const q = stripAccents(search.toLowerCase());
-    return source.filter(p =>
-      stripAccents(p.designation.toLowerCase()).includes(q) ||
-      (p.article || "").includes(q)
     );
-  }, [notDoneProducts, doneProducts, showDone, search]);
-
-  const stats = useMemo(() => {
-    const total = sortedProducts.length;
-    const done = sortedProducts.filter(p => state[p._pkey]?.done).length;
-    return { total, done, remaining: total - done };
-  }, [sortedProducts, state]);
-
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(""), 1500);
-  };
-
-  const handleValidate = (pkey, qtys) => {
-    validateRow(pkey, qtys);
-    showToast("✓ Validé");
-  };
-
-  const handleUndo = (pkey) => {
-    undoRow(pkey);
-    showToast("↶ Annulé");
-  };
-
-  // editMode peut être true = on autorise aussi la modif de la quantité reçue
-  const [editAllowReceived, setEditAllowReceived] = useState(false);
-  const handleEdit = (pkey, allowReceivedEdit) => {
-    lockRow(pkey);
-    setEditAllowReceived(!!allowReceivedEdit);
-    setEditingKey(pkey);
-  };
-
-  const handleEditSave = (qtys) => {
-    if (editingKey) {
-      validateRow(editingKey, qtys);
-      showToast("✓ Ajusté et validé");
-    }
-    setEditingKey(null);
-  };
-
-  const handleEditCancel = () => {
-    if (editingKey) unlockRow(editingKey);
-    setEditingKey(null);
-  };
-
-  const editingProduct = editingKey ? sortedProducts.find(p => p._pkey === editingKey) : null;
-
-  // Quand on est en mode scan et qu'on valide, on vide la recherche pour le prochain produit
-  const handleValidateScan = (pkey, qtys) => {
-    handleValidate(pkey, qtys);
-    if (viewMode === "scan") {
-      setSearch("");
-      setTimeout(() => searchInputRef.current?.focus(), 50);
-    }
-  };
-
+  }
   return (
-    <div className="app">
-      <div className="header">
-        <div className="header-row">
-          <div>
-            <h1>{supplier}</h1>
-            <div className="sub">
-              {operator} • <span className={`conn-status ${!connected ? "offline" : ""}`}>
-                {connected ? "● en ligne" : "● hors ligne"}
-              </span>
-            </div>
-          </div>
-          <div className="header-actions">
-            <button
-              className="header-btn"
-              onClick={() => setViewMode(viewMode === "list" ? "scan" : "list")}
-              style={{background: viewMode === "scan" ? "#ffb300" : "rgba(255,255,255,.15)"}}
-            >
-              {viewMode === "scan" ? "📋 Mode liste" : "⚡ Mode scan"}
-            </button>
-            <button className="header-btn" onClick={onLeave}>Quitter</button>
-          </div>
-        </div>
-        <div className="progress-bar">
-          <div className="progress-fill" style={{width: `${stats.total > 0 ? (stats.done/stats.total)*100 : 0}%`}}></div>
-        </div>
-        <div className="progress-text" style={{color: "rgba(255,255,255,.85)"}}>
-          <span>{stats.done} / {stats.total} produits</span>
-          <span>{stats.remaining} restants</span>
-        </div>
+    <div className="config-panel">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+        <label style={{margin:0}}>🔗 URL Apps Script Web App</label>
+        {apiUrl && <button className="btn btn-sm btn-secondary" onClick={() => setExpanded(false)}>Fermer ✕</button>}
       </div>
-
-      {/* Onglets À faire / Dispatchés */}
-      <div className="tabs-bar">
-        <button
-          className={`tab ${!showDone ? "active" : ""}`}
-          onClick={() => { setShowDone(false); setSearch(""); }}
-        >
-          À faire ({notDoneProducts.length})
-        </button>
-        <button
-          className={`tab ${showDone ? "active" : ""}`}
-          onClick={() => { setShowDone(true); setSearch(""); }}
-        >
-          ✓ Dispatchés ({doneProducts.length})
-        </button>
+      <div style={{display:'flex',gap:8,marginTop:6}}>
+        <input value={val} onChange={e => setVal(e.target.value)} placeholder="https://script.google.com/macros/s/.../exec"/>
+        <button className="btn btn-sm" onClick={() => {
+          setApiUrl(val);
+          localStorage.setItem('kbg_apps_script_url', val);
+          if (val) {
+            setExpanded(false);
+            onReload && onReload();
+          }
+        }}>Enregistrer</button>
       </div>
-
-      {/* Mode SCAN : recherche géante centrée, peu de résultats */}
-      {viewMode === "scan" && !showDone && (
-        <div className="scan-mode">
-          <div className="scan-search-wrap">
-            <input
-              ref={searchInputRef}
-              className="scan-search-input"
-              type="text"
-              placeholder="Tape 2-3 lettres..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              autoFocus
-            />
-            {search && (
-              <button className="scan-clear" onClick={() => { setSearch(""); searchInputRef.current?.focus(); }}>
-                ✕
-              </button>
-            )}
-          </div>
-
-          {!search.trim() && (
-            <div className="scan-hint">
-              <div style={{fontSize: 40, marginBottom: 8}}>⚡</div>
-              <div style={{fontWeight: 600, marginBottom: 4}}>Mode scan rapide</div>
-              <div style={{fontSize: 13, color: "#666"}}>
-                Tape les premières lettres du produit que tu tiens dans la main
-              </div>
-              <div style={{fontSize: 12, color: "#999", marginTop: 12}}>
-                {notDoneProducts.length} produits restants
-              </div>
-            </div>
-          )}
-
-          {search.trim() && filtered.length === 0 && (
-            <div className="scan-hint">
-              <div style={{fontSize: 30, marginBottom: 8}}>🔍</div>
-              <div style={{color: "#999"}}>Aucun produit ne correspond à "<b>{search}</b>"</div>
-              <div style={{fontSize: 12, color: "#aaa", marginTop: 8}}>
-                Vérifie l'orthographe ou bascule en mode liste
-              </div>
-            </div>
-          )}
-
-          {search.trim() && filtered.length > 0 && (
-            <div className="scan-results">
-              {filtered.slice(0, 5).map(p => (
-                <ProductCard
-                  key={p._pkey}
-                  product={p}
-                  pkey={p._pkey}
-                  status={state[p._pkey] || {}}
-                  operator={operator}
-                  onLock={lockRow}
-                  onUnlock={unlockRow}
-                  onValidate={handleValidateScan}
-                  onUndo={handleUndo}
-                  onEdit={handleEdit}
-                />
-              ))}
-              {filtered.length > 5 && (
-                <div style={{textAlign: "center", color: "#999", fontSize: 12, padding: 8}}>
-                  + {filtered.length - 5} autres résultats... précise ta recherche
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Mode LISTE classique ou onglet Dispatchés */}
-      {(viewMode === "list" || showDone) && (
-        <>
-          <div className="search-bar">
-            <input
-              type="text"
-              placeholder={showDone ? "🔍 Chercher dans les dispatchés..." : "🔍 Chercher un produit..."}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="product-list">
-            {filtered.length === 0 && (
-              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
-                {showDone
-                  ? (search.trim() ? "Aucun résultat" : "Aucun produit dispatché pour l'instant")
-                  : (search.trim() ? "Aucun résultat" : "🎉 Tous les produits sont dispatchés !")
-                }
-              </div>
-            )}
-            {filtered.map(p => (
-              <ProductCard
-                key={p._pkey}
-                product={p}
-                pkey={p._pkey}
-                status={state[p._pkey] || {}}
-                operator={operator}
-                onLock={lockRow}
-                onUnlock={unlockRow}
-                onValidate={handleValidate}
-                onUndo={handleUndo}
-                onEdit={handleEdit}
-              />
-            ))}
-          </div>
-        </>
-      )}
-
-      <div className="bottom-bar">
-        <div className="stats">
-          <span>Avancement: <b>{stats.done}/{stats.total}</b></span>
-          <span>{stats.total > 0 ? Math.round((stats.done/stats.total)*100) : 0}%</span>
-        </div>
-        <button
-          className="btn-finish"
-          onClick={() => onFinish(state, sortedProducts)}
-          disabled={stats.done === 0}
-        >
-          {stats.done === stats.total ? "✓ Terminer et envoyer le récap" : `Voir le récap (${stats.done} validés)`}
-        </button>
+      <div className="small" style={{marginTop:6}}>
+        Première utilisation : déploie le code <code>apps-script.gs</code> sur script.google.com (instructions dans README).
       </div>
-
-      {editingProduct && (
-        <EditModal
-          product={editingProduct}
-          status={state[editingKey] || {}}
-          allowReceivedEdit={editAllowReceived}
-          onSave={handleEditSave}
-          onClose={handleEditCancel}
-        />
-      )}
-
-      {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }
 
-function RecapScreen({ sessionId, operator, supplier, products, state, onClose, onLeave }) {
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [error, setError] = useState("");
+function Header({ step, dataStatus, stockDate }) {
+  const steps = ['Tableau de bord', 'Fournisseur', 'Prédiction', 'Validation', 'Export'];
+  return (
+    <div className="card">
+      <h1>🥦 Kelbongoo – Prédiction Commandes</h1>
+      <div className="subtitle">{fmtFR(new Date())}{stockDate && stockDate !== todayStr() && <span style={{color:'#dd6b20'}}> · ⚠️ Stock du {stockDate}</span>}</div>
+      <div className="data-status">
+        {Object.entries(dataStatus).map(([k, v]) => (
+          <div key={k}>
+            <span className={`dot ${v === 'ok' ? 'dot-ok' : v === 'err' ? 'dot-err' : 'dot-load'}`}></span>
+            <span>{k}</span>
+          </div>
+        ))}
+      </div>
+      <div className="tab-row" style={{marginTop:12,marginBottom:0}}>
+        {steps.map((s, i) => (
+          <div key={s} className={`tab ${i === step ? 'active' : ''}`}>{i + 1}. {s}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  // Analyse
-  const analysis = useMemo(() => {
-    const total = products.length;
-    const done = products.filter(p => state[p._pkey]?.done).length;
-    const notDone = products.filter(p => !state[p._pkey]?.done);
+function MarkAsPassedModal({ apiUrl, supplierEntry, data, onClose, onSaved }) {
+  const [whenChoice, setWhenChoice] = useState('today');
+  const [customDate, setCustomDate] = useState(todayStr());
+  const [quantities, setQuantities] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-    // Timestamps
-    const timestamps = products
-      .map(p => state[p._pkey]?.doneAt)
-      .filter(t => t)
-      .sort((a,b) => a - b);
-    const startedAt = timestamps[0];
-    const endedAt = timestamps[timestamps.length - 1];
-    const duration = startedAt && endedAt ? (endedAt - startedAt) : 0;
+  // Produits du fournisseur depuis le stock
+  const products = useMemo(() => {
+    const stockRows = (data.stock && data.stock.rows) || [];
+    const matchKey = supplierEntry.stockMatchKey || supplierEntry.supplier;
+    const productInfos = (data.products && data.products.products) || [];
+    return stockRows
+      .filter(r => r.producteur === matchKey)
+      .map(s => {
+        const info = productInfos.find(p => p.id === s.id) || {};
+        return { ...s, paht: info.paht || 0, pcb: info.pcb || 1 };
+      })
+      .sort((a, b) => a.produit.localeCompare(b.produit));
+  }, [data, supplierEntry]);
 
-    // Stats par opérateur
-    const byOp = {};
-    products.forEach(p => {
-      const s = state[p._pkey];
-      if (s?.done && s.doneBy) {
-        byOp[s.doneBy] = (byOp[s.doneBy] || 0) + 1;
+  const getDate = () => {
+    if (whenChoice === 'today') return todayStr();
+    if (whenChoice === 'yesterday') {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return fmtDate(d);
+    }
+    return customDate;
+  };
+
+  const save = async (withDetail) => {
+    setSaving(true); setError('');
+    try {
+      const dateStr = getDate();
+      const orderId = 'ext_' + Date.now();
+      let lines;
+      if (withDetail) {
+        lines = products
+          .map(p => ({
+            productId: p.id, produit: p.produit, stock: p.stockFin,
+            ventes7j: 0, proposedMedian: 0,
+            validated: parseFloat(quantities[p.id]) || 0,
+          }))
+          .filter(l => l.validated > 0);
+      } else {
+        // Au moins 1 ligne factice pour que le sheet enregistre quelque chose
+        lines = [{
+          productId: '__no_detail__', 
+          produit: '(commande sans détail)',
+          stock: 0, ventes7j: 0, proposedMedian: 0, validated: 0,
+        }];
       }
+      
+      if (withDetail && lines.length === 0) {
+        setError('Saisis au moins une quantité, ou clique "Sans détail"');
+        setSaving(false); return;
+      }
+      
+      const r = await callApi(apiUrl, 'save_validation', {
+        supplier: supplierEntry.supplier,
+        context: `Commande passée hors app (${whenChoice})`,
+        userName: 'Henry',
+        orderId,
+        status: 'passed_externally',
+        dateOverride: dateStr,
+        lines,
+      });
+      if (r.error) throw new Error(r.error);
+      // Marquer immédiatement comme "passed_externally"
+      await callApi(apiUrl, 'mark_as_sent', { orderId, status: 'passed_externally', dateOverride: dateStr });
+      onSaved && onSaved();
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    }
+    setSaving(false);
+  };
+
+  const filledCount = Object.values(quantities).filter(v => parseFloat(v) > 0).length;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="modal-title">✓ Commande passée hors app — {supplierEntry.supplier}</div>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{marginBottom:16}}>
+          <label>Quand a-t-elle été passée ?</label>
+          <div className="radio-group">
+            <label><input type="radio" checked={whenChoice === 'today'} onChange={() => setWhenChoice('today')}/> Aujourd'hui</label>
+            <label><input type="radio" checked={whenChoice === 'yesterday'} onChange={() => setWhenChoice('yesterday')}/> Hier</label>
+            <label><input type="radio" checked={whenChoice === 'custom'} onChange={() => setWhenChoice('custom')}/> Autre :</label>
+            <input type="date" value={customDate} onChange={e => setCustomDate(e.target.value)} disabled={whenChoice !== 'custom'} style={{width:'auto'}}/>
+          </div>
+        </div>
+
+        <div style={{marginBottom:8}}>
+          <label>Détail des produits commandés (optionnel, pour l'apprentissage)</label>
+          <div className="small">Laisse vide les produits non commandés. Saisis les quantités pour ceux qui le sont.</div>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        <div style={{maxHeight:'40vh',overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          <table>
+            <thead>
+              <tr>
+                <th>Produit</th>
+                <th className="num">Stock</th>
+                <th>PCB</th>
+                <th>Qté commandée</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map(p => (
+                <tr key={p.id}>
+                  <td><strong>{p.produit}</strong><div className="small">{p.unite}</div></td>
+                  <td className="num">{p.stockFin}</td>
+                  <td className="small">{p.pcb || 1}</td>
+                  <td>
+                    <input type="number" className="qty-input" value={quantities[p.id] || ''} placeholder="0"
+                      onChange={e => setQuantities({...quantities, [p.id]: e.target.value})}/>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Annuler</button>
+          <button className="btn btn-warn" onClick={() => save(false)} disabled={saving}>
+            {saving ? <><span className="loader"/> Enregistrement...</> : '⚡ Sans détail'}
+          </button>
+          <button className="btn btn-success" onClick={() => save(true)} disabled={saving || filledCount === 0}>
+            {saving ? <><span className="loader"/> Enregistrement...</> : `✓ Avec détail (${filledCount} produit${filledCount > 1 ? 's' : ''})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepDashboard({ apiUrl, data, onSelectSupplier, onSkipToList, onRefresh }) {
+  const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [markPassedEntry, setMarkPassedEntry] = useState(null);
+  
+  const load = useCallback(async () => {
+    setLoading(true); setError('');
+    try {
+      // Si init_light a déjà inclus le dashboard, on l'utilise directement
+      if (data && data.dashboard) {
+        setDashboard(data.dashboard);
+      } else {
+        const r = await callApi(apiUrl, 'get_dashboard');
+        if (r.error) throw new Error(r.error);
+        setDashboard(r);
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+    setLoading(false);
+  }, [apiUrl, data]);
+  
+  useEffect(() => { load(); }, [load]);
+  
+  // IMPORTANT : tous les hooks DOIVENT être appelés avant les returns conditionnels
+  const stockSuppliers = useMemo(() => {
+    const counts = {};
+    ((data.stock && data.stock.rows) || []).forEach(r => { counts[r.producteur] = (counts[r.producteur] || 0) + 1; });
+    return counts;
+  }, [data]);
+  
+  if (loading) return <div className="card"><span className="loader"/> Calcul du tableau de bord...</div>;
+  if (error) return <div className="card"><div className="alert alert-error">{error}</div>
+    <button className="btn" onClick={load}>Réessayer</button></div>;
+  if (!dashboard) return null;
+  
+  const { toOrder, weekOrders } = dashboard;
+  
+  const goToSupplier = (entry) => {
+    const stockName = entry.stockMatchKey || entry.supplier;
+    onSelectSupplier({
+      name: stockName,
+      count: stockSuppliers[stockName] || 0,
+      cad: {
+        producteur: entry.supplier,
+        jourLivraison: entry.jourLivraison,
+        deadline: entry.deadlineText,
+        franco: entry.franco,
+        mail: entry.mail,
+        periodDays: entry.periodDays || 7,
+        daysUntilNextDelivery: entry.daysUntilDeadline !== null ? (entry.daysUntilDeadline + 1) : null,
+      },
     });
+  };
+  
+  return (
+    <div>
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+          <div className="step" style={{margin:0}}>📋 Commandes à passer</div>
+          <div>
+            <button className="btn btn-sm btn-secondary" onClick={onRefresh}>↻ Actualiser données</button>
+            <button className="btn btn-sm btn-secondary" style={{marginLeft:6}} onClick={onSkipToList}>Voir tous les fournisseurs →</button>
+          </div>
+        </div>
+        
+        {toOrder.length === 0 ? (
+          <div className="alert alert-info">Aucune commande détectée pour le moment. Vérifie que le cadencier est bien rempli.</div>
+        ) : (
+          <div style={{overflowX:'auto'}}>
+          <table>
+            <thead>
+              <tr>
+                <th>Fournisseur</th>
+                <th>Prochaine deadline</th>
+                <th>Livraison</th>
+                <th className="num">Stock</th>
+                <th className="num">Prév. ventes</th>
+                <th className="num">Manque</th>
+                <th>Dernière cde</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {toOrder.map(o => {
+                const dotClass = `dot dot-${o.urgency === 'red' ? 'err' : o.urgency === 'orange' ? 'load' : o.urgency === 'green' ? 'ok' : 'load'}`;
+                const lastOrderLabel = o.daysSinceLastOrder === null ? '—' :
+                  o.daysSinceLastOrder === 0 ? "aujourd'hui" :
+                  o.daysSinceLastOrder === 1 ? 'hier' :
+                  `il y a ${o.daysSinceLastOrder}j`;
+                return (
+                  <tr key={o.supplier}>
+                    <td>
+                      <span className={dotClass} style={{marginRight:6}}></span>
+                      <strong>{o.supplier}</strong>
+                      <div className="small">{o.productCount} produit{o.productCount > 1 ? 's' : ''} en stock</div>
+                    </td>
+                    <td>
+                      <strong>{o.nextDeadlineLabel}</strong>
+                      {o.daysUntilDeadline !== null && <div className="small">
+                        {o.daysUntilDeadline === 0 ? "aujourd'hui ⚠️" : 
+                         o.daysUntilDeadline === 1 ? 'demain' : 
+                         `dans ${o.daysUntilDeadline}j`}
+                      </div>}
+                    </td>
+                    <td className="small">{o.jourLivraison}</td>
+                    <td className="num">{o.totalStock}</td>
+                    <td className="num">{o.forecastSales}</td>
+                    <td className="num">
+                      {o.manque > 0 
+                        ? <span className="pill pill-red">⚠️ {o.manque}</span>
+                        : <span className="pill pill-green">✓ 0</span>}
+                      {o.productsInDanger > 0 && <div className="small">⚠️ {o.productsInDanger} produit{o.productsInDanger > 1 ? 's' : ''} en rupture potentielle</div>}
+                    </td>
+                    <td className="small">
+                      {lastOrderLabel}
+                      {o.lastOrderStatus && o.lastOrderStatus !== 'draft' && (
+                        <div className="small">
+                          <span className="badge">{o.lastOrderStatus}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <button className="btn btn-sm" disabled={o.productCount === 0} onClick={() => goToSupplier(o)}>
+                        Passer →
+                      </button>
+                      <button className="btn btn-sm btn-secondary" style={{marginLeft:4,fontSize:11}} 
+                        disabled={o.productCount === 0}
+                        onClick={() => setMarkPassedEntry(o)}>
+                        ✓ Déjà passée
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          </div>
+        )}
+        
+        <div className="small" style={{marginTop:10}}>
+          {toOrder.filter(o => o.urgency === 'red').length} urgent · 
+          {' '}{toOrder.filter(o => o.urgency === 'orange').length} bientôt · 
+          {' '}{toOrder.filter(o => o.urgency === 'green').length} OK
+        </div>
+      </div>
+      
+      <div className="card">
+        <div className="step">✅ Commandes passées cette semaine</div>
+        {weekOrders.length === 0 ? (
+          <div className="alert alert-info">
+            Aucune commande enregistrée comme "passée" cette semaine.
+            <div className="small" style={{marginTop:6}}>Une commande devient "passée" quand tu cliques sur le bouton ✓ Commande passée à la fin du processus.</div>
+          </div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Fournisseur</th>
+                <th className="num">Lignes</th>
+                <th className="num">Qté totale</th>
+                <th>Statut</th>
+                <th>Par</th>
+              </tr>
+            </thead>
+            <tbody>
+              {weekOrders.map(o => {
+                const d = new Date(o.date);
+                return (
+                  <tr key={o.orderId}>
+                    <td>{d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })}</td>
+                    <td><strong>{o.supplier}</strong></td>
+                    <td className="num">{o.lineCount}</td>
+                    <td className="num">{o.totalQty}</td>
+                    <td>
+                      <span className={`pill ${o.status === 'passed' ? 'pill-green' : 'pill-blue'}`}>
+                        {o.status === 'passed' ? 'Passée' : 'Envoyée'}
+                      </span>
+                    </td>
+                    <td className="small">{o.user || '—'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+      
+      {markPassedEntry && (
+        <MarkAsPassedModal 
+          apiUrl={apiUrl} 
+          supplierEntry={markPassedEntry} 
+          data={data}
+          onClose={() => setMarkPassedEntry(null)}
+          onSaved={() => { load(); onRefresh && onRefresh(); }}
+        />
+      )}
+    </div>
+  );
+}
 
-    // Ajustements (quantités modifiées)
-    const adjusted = products.filter(p => {
-      const s = state[p._pkey];
-      if (!s?.done) return false;
-      return (
-        (s.qtyRob !== undefined && s.qtyRob !== p.rob) ||
-        (s.qtyTol !== undefined && s.qtyTol !== p.tol) ||
-        (s.qtyPdp !== undefined && s.qtyPdp !== p.pdp) ||
-        (s.qtyRecue !== undefined && s.qtyRecue !== p.recue)
-      );
-    });
+function StepSupplier({ data, onSelect, onBack }) {
+  const [search, setSearch] = useState('');
+  const stockRows = (data.stock && data.stock.rows) || [];
+  const cad = data.cadencier || [];
+  const suppliers = useMemo(() => {
+    const counts = {};
+    stockRows.forEach(r => { counts[r.producteur] = (counts[r.producteur] || 0) + 1; });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count, cad: cad.find(c => fuzzyMatch(c.producteur, name)) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [stockRows, cad]);
+  const filtered = suppliers.filter(s => normalizeName(s.name).includes(normalizeName(search)));
 
-    return { total, done, notDone, startedAt, endedAt, duration, byOp, adjusted };
-  }, [products, state]);
+  return (
+    <div className="card">
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div className="step" style={{margin:0}}>Étape 2 — Choisir le fournisseur</div>
+        <button className="btn btn-sm btn-secondary" onClick={onBack}>← Tableau de bord</button>
+      </div>
+      <input type="text" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} style={{marginBottom:12}}/>
+      <div style={{maxHeight:'60vh',overflowY:'auto'}}>
+        <table>
+          <thead>
+            <tr>
+              <th>Fournisseur</th>
+              <th className="num">Produits</th>
+              <th>Cadencier</th>
+              <th>Livraison</th>
+              <th>Deadline</th>
+              <th>Franco</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(s => (
+              <tr key={s.name}>
+                <td><strong>{s.name}</strong></td>
+                <td className="num">{s.count}</td>
+                <td>{s.cad ? <span className="pill pill-green">✓</span> : <span className="pill pill-gray">—</span>}</td>
+                <td className="small">{s.cad?.jourLivraison || '—'}</td>
+                <td className="small">{s.cad?.deadline || '—'}</td>
+                <td className="small">{s.cad?.franco || '—'}</td>
+                <td><button className="btn btn-sm" onClick={() => onSelect(s)}>→</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="small" style={{marginTop:10}}>
+        {suppliers.length} fournisseurs · {suppliers.filter(s => s.cad).length} avec cadencier
+      </div>
+    </div>
+  );
+}
 
-  const sendRecap = async () => {
-    setSending(true);
-    setError("");
+function StepPrediction({ supplier, data, learnings, onValidate, onBack, apiUrl }) {
+  const today = useMemo(() => new Date(), []);
+  // Période = nb jours entre 2 livraisons consécutives (depuis cadencier)
+  const periodDays = supplier.cad?.periodDays || 7;
+  const daysUntilDelivery = supplier.cad?.daysUntilNextDelivery || 0;
+  // daysToCover par défaut = délai jusqu'à prochaine livraison + 1 période entière
+  const defaultDaysToCover = daysUntilDelivery + periodDays;
+  
+  const [daysToCover, setDaysToCover] = useState(defaultDaysToCover);
+  const [context, setContext] = useState('');
+  const [selectedScenario, setSelectedScenario] = useState({});
+  const [overrides, setOverrides] = useState({});
+  const [pcbOverrides, setPcbOverrides] = useState({});
+  const [expandedRows, setExpandedRows] = useState({});
+  
+  // Chargement BDC du fournisseur
+  const [bdc, setBdc] = useState(null);
+  const [bdcLoading, setBdcLoading] = useState(true);
+  const [bdcError, setBdcError] = useState('');
+  
+  // Chargement lazy des stats du fournisseur (init_light n'envoie pas les ventes détaillées)
+  const [supplierStats, setSupplierStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  
+  useEffect(() => {
+    setBdcLoading(true);
+    setBdcError('');
+    callApi(apiUrl, 'read_bdc', { supplier: supplier.name })
+      .then(r => {
+        if (!r.ok) {
+          setBdcError(r.error || 'BDC non disponible');
+          setBdc(null);
+        } else {
+          setBdc(r);
+        }
+      })
+      .catch(e => setBdcError(e.message))
+      .finally(() => setBdcLoading(false));
+  }, [apiUrl, supplier.name]);
+  
+  // Charger les stats détaillées du fournisseur en parallèle
+  useEffect(() => {
+    // Si data.statsVentes a déjà salesByProduct (mode init full), pas besoin de re-fetch
+    if (data.statsVentes && data.statsVentes.salesByProduct && Object.keys(data.statsVentes.salesByProduct).length > 0) {
+      setSupplierStats({ salesByProduct: data.statsVentes.salesByProduct });
+      setStatsLoading(false);
+      return;
+    }
+    // Sinon (mode init_light) : charger spécifiquement pour ce fournisseur
+    setStatsLoading(true);
+    callApi(apiUrl, 'get_supplier_stats', { supplier: supplier.name })
+      .then(r => {
+        setSupplierStats(r);
+      })
+      .catch(e => {
+        setSupplierStats({ salesByProduct: {}, error: e.message });
+      })
+      .finally(() => setStatsLoading(false));
+  }, [apiUrl, supplier.name, data]);
 
-    const payload = {
-      action: "log-dispatch-recap",
-      sessionId,
-      supplier,
-      operator,
-      startedAt: analysis.startedAt ? new Date(analysis.startedAt).toISOString() : null,
-      endedAt: analysis.endedAt ? new Date(analysis.endedAt).toISOString() : null,
-      durationMs: analysis.duration,
-      total: analysis.total,
-      done: analysis.done,
-      notDone: analysis.notDone.length,
-      byOperator: analysis.byOp,
-      lines: products.map(p => {
-        const s = state[p._pkey] || {};
+  const stockRows = (data.stock && data.stock.rows) || [];
+  const products = (data.products && data.products.products) || [];
+  const salesByProduct = (supplierStats && supplierStats.salesByProduct) || {};
+
+  // Construire un map normalisé pour matching produit ↔ BDC
+  const bdcByNormName = useMemo(() => {
+    const m = {};
+    if (bdc && bdc.items) {
+      bdc.items.forEach(it => {
+        const key = normalizeName(it.produit);
+        if (key) m[key] = it;
+      });
+    }
+    return m;
+  }, [bdc]);
+
+  const productsForSupplier = useMemo(() => {
+    return stockRows
+      .filter(r => r.producteur === supplier.name)
+      .map(stockItem => {
+        const info = products.find(p => p.id === stockItem.id) || {};
+        // PCB : priorité au BDC, fallback fiches-produits
+        const bdcItem = bdcByNormName[normalizeName(stockItem.produit)];
+        const pcbFromBdc = bdcItem && bdcItem.pcb && !isNaN(bdcItem.pcb) ? bdcItem.pcb : null;
+        const pcbFromFiches = info.pcb || null;
+        const pcb = pcbFromBdc || pcbFromFiches || 1;
         return {
-          article: p.article,
-          designation: p.designation,
-          recue_initiale: p.recue,
-          recue: s.qtyRecue !== undefined ? s.qtyRecue : p.recue,
-          rob_prevu: p.rob,
-          tol_prevu: p.tol,
-          pdp_prevu: p.pdp,
-          rob_reel: s.qtyRob !== undefined ? s.qtyRob : p.rob,
-          tol_reel: s.qtyTol !== undefined ? s.qtyTol : p.tol,
-          pdp_reel: s.qtyPdp !== undefined ? s.qtyPdp : p.pdp,
-          done: !!s.done,
-          doneBy: s.doneBy || "",
-          doneAt: s.doneAt ? new Date(s.doneAt).toISOString() : ""
+          ...stockItem,
+          paht: (bdcItem && bdcItem.paht) || info.paht || 0,
+          pcb: pcb,
+          pcbSource: pcbFromBdc ? 'bdc' : (pcbFromFiches ? 'fiches' : 'default'),
+          ean: (bdcItem && bdcItem.ean) || info.ean || '',
+          tva: info.tva || 5.5,
+          inBdc: !!bdcItem,
         };
       })
-    };
+      .sort((a, b) => a.produit.localeCompare(b.produit));
+  }, [stockRows, products, supplier, bdcByNormName]);
 
-    try {
-      // Apps Script en mode no-cors car redirection
-      await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload)
-      });
-      setSent(true);
-    } catch (e) {
-      setError(`Erreur: ${e.message}`);
-    } finally {
-      setSending(false);
-    }
+  const productAnalyses = useMemo(() => {
+    return productsForSupplier.map(p => {
+      const sales = salesByProduct[p.id] || [];
+      const stats = computeStats(sales, today, periodDays);
+      const pcb = pcbOverrides[p.id] || p.pcb || 1;
+      const adjCoef = computeAdjustment(p.id, learnings);
+      const r = buildScenarios(stats, p.stockFin, daysToCover, pcb, adjCoef);
+      return { product: p, stats, ...r, pcb, adjCoef };
+    });
+  }, [productsForSupplier, salesByProduct, today, daysToCover, pcbOverrides, learnings, periodDays]);
+
+  useEffect(() => {
+    const def = {};
+    let changed = false;
+    productAnalyses.forEach(pa => {
+      if (!(pa.product.id in selectedScenario)) { def[pa.product.id] = 'median'; changed = true; }
+    });
+    if (changed) setSelectedScenario(prev => ({ ...prev, ...def }));
+  }, [productAnalyses.length]);
+
+  const getQty = (pa) => {
+    if (pa.product.id in overrides) return overrides[pa.product.id];
+    const scn = selectedScenario[pa.product.id] || 'median';
+    return pa.scenarios[scn].need;
   };
 
+  const totalLines = productAnalyses.filter(pa => getQty(pa) > 0).length;
+  const totalAmount = productAnalyses.reduce((s, pa) => s + getQty(pa) * (pa.product.paht || 0), 0);
+  const franco = supplier.cad?.franco ? parseFloat(String(supplier.cad.franco).replace(/[^\d.,]/g,'').replace(',','.')) || 0 : 0;
+
   return (
-    <div className="app">
-      <div className="header">
-        <div className="header-row">
-          <div>
-            <h1>Récap dispatch</h1>
-            <div className="sub">{supplier}</div>
-          </div>
-          <div className="header-actions">
-            <button className="header-btn" onClick={onClose}>← Retour</button>
-          </div>
+    <div className="card">
+      <div className="step">Étape 3 — Prédiction pour {supplier.name}</div>
+      {supplier.cad && (
+        <div className="alert alert-info">
+          <strong>📅 {supplier.cad.jourLivraison || 'NC'}</strong>
+          {supplier.cad.deadline && <> · Deadline : <em>{supplier.cad.deadline}</em></>}
+          {supplier.cad.franco && <> · Franco : <em>{supplier.cad.franco}</em></>}
+          <> · Période : <strong>{periodDays}j</strong> entre 2 livraisons</>
+          {supplier.cad.mail && <> · Mail : <code>{supplier.cad.mail}</code></>}
+        </div>
+      )}
+      {bdcLoading && <div className="alert alert-info"><span className="loader"/> Chargement du BDC fournisseur...</div>}
+      {statsLoading && <div className="alert alert-info"><span className="loader"/> Chargement des ventes du fournisseur...</div>}
+      {bdcError && (
+        <div className="alert alert-warn">
+          ⚠️ BDC non disponible : {bdcError}
+          <div className="small">L'app fonctionnera mais ne pourra pas écrire dans le BDC à la validation. Le PCB utilisera fiches-produits.csv.</div>
+        </div>
+      )}
+      {bdc && bdc.ok && (
+        <div className="alert alert-success" style={{fontSize:12}}>
+          ✓ BDC trouvé : <strong>{bdc.fileName}</strong> ({bdc.items.length} lignes, {bdc.isGoogleSheet ? 'Sheet natif' : 'XLSX'})
+          {!bdc.isGoogleSheet && <span style={{marginLeft:8}} className="pill pill-orange">⚠️ XLSX = écriture impossible</span>}
+        </div>
+      )}
+      <div className="row" style={{marginBottom:12}}>
+        <div className="col" style={{maxWidth:200}}>
+          <label>Jours à couvrir</label>
+          <input type="number" value={daysToCover} onChange={e => setDaysToCover(parseInt(e.target.value) || 7)} min="1" max="60"/>
+          <div className="small">Défaut = {daysUntilDelivery}j (jusqu'à livraison) + {periodDays}j (période)</div>
+        </div>
+        <div className="col" style={{flex:3}}>
+          <label>💡 Contexte (météo, vacances, fériés...)</label>
+          <input value={context} onChange={e => setContext(e.target.value)} placeholder="ex: canicule prévue, lundi férié..."/>
         </div>
       </div>
-
-      <div className="recap-section">
-        <div className="recap-card">
-          <h3>📊 Avancement</h3>
-          <div className="recap-stat">
-            <span className="label">Produits totaux</span>
-            <span className="value">{analysis.total}</span>
-          </div>
-          <div className="recap-stat">
-            <span className="label">Dispatchés</span>
-            <span className="value">{analysis.done}</span>
-          </div>
-          <div className="recap-stat">
-            <span className="label">Non traités</span>
-            <span className="value" style={{color: analysis.notDone.length > 0 ? "#d32f2f" : "#1a4d2e"}}>
-              {analysis.notDone.length}
+      <div style={{overflowX:'auto'}}>
+      <table>
+        <thead>
+          <tr>
+            <th>Produit</th>
+            <th className="num">Stock</th>
+            <th className="num">Période ({periodDays}j)</th>
+            <th className="num">Période -1</th>
+            <th className="num">Moy 4 périodes</th>
+            <th>PCB</th>
+            <th colSpan="3">Propositions (cliquer)</th>
+            <th>Final</th>
+            <th className="num">€ HT</th>
+          </tr>
+        </thead>
+        <tbody>
+          {productAnalyses.map(pa => {
+            const sel = selectedScenario[pa.product.id] || 'median';
+            const finalQty = getQty(pa);
+            const trendIcon = pa.trend > 1.15 ? '📈' : pa.trend < 0.85 ? '📉' : '→';
+            const isExpanded = expandedRows[pa.product.id];
+            const productSales = (data.statsVentes?.salesByProduct?.[pa.product.id]) || [];
+            // Détail des derniers jours (période courante)
+            const ms = 24 * 3600 * 1000;
+            const startCur = new Date(today.getTime() - periodDays * ms);
+            const recentSales = productSales
+              .filter(s => {
+                const d = new Date(s.d + 'T00:00:00');
+                return d > startCur && d <= today;
+              })
+              .sort((a, b) => b.d.localeCompare(a.d));
+            return [
+              <tr key={pa.product.id}>
+                <td>
+                  <button className="btn btn-sm btn-secondary" style={{padding:'2px 6px',marginRight:6,fontSize:11}}
+                    onClick={() => setExpandedRows({...expandedRows, [pa.product.id]: !isExpanded})}>
+                    {isExpanded ? '▼' : '▶'}
+                  </button>
+                  <strong>{pa.product.produit}</strong>
+                  <div className="small">{pa.product.unite}</div>
+                </td>
+                <td className="num"><strong>{pa.product.stockFin}</strong></td>
+                <td className="num">{pa.stats.current}<div className="small">{pa.stats.daysCur}j {trendIcon}</div></td>
+                <td className="num small">{pa.stats.prev}</td>
+                <td className="num small">{pa.stats.avg4.toFixed(1)}</td>
+                <td>
+                  <input type="number" className="qty-input" value={pcbOverrides[pa.product.id] || pa.product.pcb || 1}
+                    onChange={e => setPcbOverrides({...pcbOverrides, [pa.product.id]: parseInt(e.target.value) || 1})}/>
+                </td>
+                {['prudent', 'median', 'large'].map(scn => (
+                  <td key={scn} className="qty-cell">
+                    <div className={`scenario-box ${sel === scn ? 'selected' : ''}`}
+                      onClick={() => {
+                        setSelectedScenario({...selectedScenario, [pa.product.id]: scn});
+                        setOverrides(prev => { const n = {...prev}; delete n[pa.product.id]; return n; });
+                      }}>
+                      <span className="badge">{pa.scenarios[scn].label}</span>
+                      <div style={{fontSize:16,fontWeight:700,margin:'2px 0'}}>{pa.scenarios[scn].need}</div>
+                      <div className="small">cible: {pa.scenarios[scn].target}</div>
+                    </div>
+                  </td>
+                ))}
+                <td>
+                  <input type="number" className="qty-input" value={finalQty}
+                    onChange={e => setOverrides({...overrides, [pa.product.id]: parseInt(e.target.value) || 0})}/>
+                </td>
+                <td className="num small">{(finalQty * (pa.product.paht || 0)).toFixed(2)}</td>
+              </tr>,
+              isExpanded && (
+                <tr key={pa.product.id + '_detail'}>
+                  <td colSpan="12" style={{padding:0,background:'#f7fafc'}}>
+                    <div className="expand-box">
+                      <div className="expand-section">
+                        <strong>📊 Ventes des 7 derniers jours (jours de distribution)</strong>
+                        {recentSales.length === 0 ? (
+                          <div className="expand-row small">Aucune vente enregistrée sur cette période</div>
+                        ) : (
+                          recentSales.map(s => {
+                            const d = new Date(s.d + 'T00:00:00');
+                            return (
+                              <div key={s.d} className="expand-row">
+                                • {d.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric', month:'short'})} : <span className="num">{s.q}</span>
+                              </div>
+                            );
+                          })
+                        )}
+                        <div className="expand-row" style={{marginTop:4,fontWeight:600}}>
+                          Total : <span className="num">{pa.stats.current}</span> sur {pa.stats.daysCur} jour{pa.stats.daysCur > 1 ? 's' : ''} de distrib
+                        </div>
+                      </div>
+                      
+                      <div className="expand-section">
+                        <strong>📈 Comparaisons</strong>
+                        <div className="expand-row">Période précédente ({periodDays}j) : <span className="num">{pa.stats.prev}</span></div>
+                        <div className="expand-row">Tendance vs période -1 : <span className="num">{((pa.trend - 1) * 100).toFixed(0)}%</span> {trendIcon}</div>
+                        <div className="expand-row">Moyenne 4 dernières périodes : <span className="num">{pa.stats.avg4.toFixed(1)}</span> /période</div>
+                        <div className="expand-row">Cette période vs moy 4 : <span className="num">{pa.stats.avg4 > 0 ? ((pa.stats.current/pa.stats.avg4 - 1) * 100).toFixed(0) : 0}%</span></div>
+                      </div>
+                      
+                      <div className="expand-section">
+                        <strong>🧮 Mon raisonnement</strong>
+                        <div className="expand-row">Vitesse vente : {pa.ratePerDay.toFixed(2)} /jour calendaire</div>
+                        <div className="expand-row">Jours à couvrir : {daysToCover}j</div>
+                        <div className="expand-row">Besoin de base : {pa.baseNeed.toFixed(1)}</div>
+                        <div className="expand-row">Coefficient appris : {pa.adjCoef.toFixed(2)} {pa.adjCoef === 1.0 ? '(pas d\'historique)' : ''}</div>
+                      </div>
+                      
+                      <div className="expand-section">
+                        <strong>💡 Propositions détaillées</strong>
+                        <div className="expand-row">Prudent : cible {pa.scenarios.prudent.target} → manque {Math.max(0, pa.scenarios.prudent.target - pa.product.stockFin)} → cmd <strong>{pa.scenarios.prudent.need}</strong> (arrondi PCB {pa.pcb})</div>
+                        <div className="expand-row">Médian : cible {pa.scenarios.median.target} → manque {Math.max(0, pa.scenarios.median.target - pa.product.stockFin)} → cmd <strong>{pa.scenarios.median.need}</strong> (arrondi PCB {pa.pcb})</div>
+                        <div className="expand-row">Large : cible {pa.scenarios.large.target} → manque {Math.max(0, pa.scenarios.large.target - pa.product.stockFin)} → cmd <strong>{pa.scenarios.large.need}</strong> (arrondi PCB {pa.pcb})</div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )
+            ];
+          })}
+        </tbody>
+      </table>
+      </div>
+      <div style={{marginTop:12,padding:12,background:'#f7fafc',borderRadius:6,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+        <div>
+          <strong>{totalLines}</strong> lignes · Total : <strong>{totalAmount.toFixed(2)} € HT</strong>
+          {franco > 0 && (
+            <span style={{marginLeft:10}}>
+              {totalAmount >= franco 
+                ? <span className="pill pill-green">Franco atteint ({franco}€)</span>
+                : <span className="pill pill-orange">Manque {(franco - totalAmount).toFixed(2)}€</span>}
             </span>
-          </div>
-        </div>
-
-        <div className="recap-card">
-          <h3>⏱ Temps</h3>
-          <div className="recap-stat">
-            <span className="label">Début</span>
-            <span className="value">{fmtTime(analysis.startedAt)}</span>
-          </div>
-          <div className="recap-stat">
-            <span className="label">Fin</span>
-            <span className="value">{fmtTime(analysis.endedAt)}</span>
-          </div>
-          <div className="recap-stat">
-            <span className="label">Durée totale</span>
-            <span className="value">{fmtDuration(analysis.duration)}</span>
-          </div>
-          {analysis.done > 0 && analysis.duration > 0 && (
-            <div className="recap-stat">
-              <span className="label">Cadence</span>
-              <span className="value">
-                {(analysis.done / (analysis.duration / 60000)).toFixed(1)} produits/min
-              </span>
-            </div>
           )}
         </div>
-
-        {Object.keys(analysis.byOp).length > 0 && (
-          <div className="recap-card">
-            <h3>👥 Par opérateur</h3>
-            {Object.entries(analysis.byOp)
-              .sort((a,b) => b[1] - a[1])
-              .map(([name, count]) => (
-                <div className="recap-stat" key={name}>
-                  <span className="label">{name}</span>
-                  <span className="value">{count} produits</span>
-                </div>
-              ))}
-          </div>
-        )}
-
-        {analysis.notDone.length > 0 && (
-          <div className="recap-card">
-            <h3>⚠️ Non traités ({analysis.notDone.length})</h3>
-            {analysis.notDone.map(p => (
-              <div className="anomaly-item" key={p._pkey}>
-                <div className="product">{p.designation}</div>
-                <div className="detail">
-                  Reçu: {p.recue} • ROB {p.rob} / TOL {p.tol} / PDP {p.pdp}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {analysis.adjusted.length > 0 && (
-          <div className="recap-card">
-            <h3>✎ Quantités ajustées ({analysis.adjusted.length})</h3>
-            {analysis.adjusted.map(p => {
-              const s = state[p._pkey];
-              return (
-                <div className="anomaly-item" key={p._pkey}>
-                  <div className="product">{p.designation}</div>
-                  <div className="detail">
-                    Prévu: {p.rob}/{p.tol}/{p.pdp} →
-                    Réel: {s.qtyRob ?? p.rob}/{s.qtyTol ?? p.tol}/{s.qtyPdp ?? p.pdp}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="recap-card">
-          <h3>📤 Envoyer le récap</h3>
-          {!sent && (
-            <button
-              className="btn-primary"
-              onClick={sendRecap}
-              disabled={sending}
-            >
-              {sending ? "Envoi en cours..." : "Envoyer au Google Sheet"}
-            </button>
-          )}
-          {sent && (
-            <div style={{padding: 12, background: "#e8f5e9", borderRadius: 8, color: "#1a4d2e", fontWeight: 600, textAlign: "center"}}>
-              ✓ Envoyé !
-            </div>
-          )}
-          {error && (
-            <div style={{padding: 12, background: "#ffebee", borderRadius: 8, color: "#c62828", fontSize: 13, marginTop: 8}}>
-              {error}
-            </div>
-          )}
-        </div>
-
-        <div className="recap-card">
-          <h3>📄 Bons de Livraison PDF</h3>
-          <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
-            Génère un BL par magasin à imprimer ou envoyer.
-          </p>
-          <button
-            className="btn-primary"
-            onClick={() => {
-              const sessionLike = {
-                id: sessionId,
-                supplier,
-                startedAt: analysis.startedAt,
-                createdBy: operator,
-                operators: Object.keys(analysis.byOp || {}),
-                state
-              };
-              generateAllBLs(sessionLike, products);
-            }}
-            style={{marginBottom: 8}}
-          >
-            📥 Télécharger les 3 BL (ROB / TOL / PDP)
+        <div>
+          <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
+          <button className="btn btn-success" style={{marginLeft:8}}
+            onClick={() => onValidate(productAnalyses, selectedScenario, overrides, context, daysToCover)}>
+            Valider →
           </button>
-          <div style={{display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6}}>
-            <button
-              className="btn-secondary"
-              onClick={() => generateBL({
-                id: sessionId, supplier,
-                startedAt: analysis.startedAt,
-                createdBy: operator,
-                operators: Object.keys(analysis.byOp || {}),
-                state
-              }, products, "rob")}
-            >ROB</button>
-            <button
-              className="btn-secondary"
-              onClick={() => generateBL({
-                id: sessionId, supplier,
-                startedAt: analysis.startedAt,
-                createdBy: operator,
-                operators: Object.keys(analysis.byOp || {}),
-                state
-              }, products, "tol")}
-            >TOL</button>
-            <button
-              className="btn-secondary"
-              onClick={() => generateBL({
-                id: sessionId, supplier,
-                startedAt: analysis.startedAt,
-                createdBy: operator,
-                operators: Object.keys(analysis.byOp || {}),
-                state
-              }, products, "pdp")}
-            >PDP</button>
-          </div>
-        </div>
-
-        <div className="recap-card">
-          <button
-            className="btn-secondary"
-            onClick={onLeave}
-            style={{background: "#1a4d2e", color: "#fff", fontWeight: 600}}
-          >
-            ← Quitter et revenir à l'accueil
-          </button>
-          <p style={{fontSize: 11, color: "#999", margin: "8px 0 0 0", textAlign: "center"}}>
-            Les données du dispatch restent disponibles dans le mode Admin.
-          </p>
         </div>
       </div>
     </div>
   );
 }
 
-/* =========================================================================
-   ADMIN SCREEN
-   ========================================================================= */
-
-function AdminScreen({ operator, onClose, onViewSession }) {
-  const [allSessions, setAllSessions] = useState([]);
-  const [search, setSearch] = useState("");
-  const [tab, setTab] = useState("live"); // live | history | stats
-  const [loading, setLoading] = useState(true);
-
-  // Suppression d'une session
-  const handleDeleteSession = (s) => {
-    const msg = s.isLive
-      ? `⚠️ Annuler la session EN COURS "${s.supplier}" ?\n\nLes opérateurs perdront leur travail.`
-      : `Supprimer la session "${s.supplier}" du ${new Date(s.startedAt).toLocaleString("fr-FR")} ?`;
-    if (!confirm(msg)) return;
-    if (firebaseReady) {
-      db.ref(`dispatch/${s.id}`).remove().catch(err => alert("Erreur: " + err.message));
-    }
+function StepValidate({ supplier, productAnalyses, selectedScenario, overrides, context, onBack, onConfirm }) {
+  const getQty = (pa) => {
+    if (pa.product.id in overrides) return overrides[pa.product.id];
+    const scn = selectedScenario[pa.product.id] || 'median';
+    return pa.scenarios[scn].need;
   };
+  const lines = productAnalyses
+    .map(pa => ({
+      productId: pa.product.id,
+      produit: pa.product.produit,
+      qty: getQty(pa),
+      stock: pa.product.stockFin,
+      ventes7j: pa.stats.current,
+      proposedMedian: pa.scenarios.median.need,
+      paht: pa.product.paht,
+      ean: pa.product.ean,
+      pcb: pa.pcb,
+      unite: pa.product.unite,
+    }))
+    .filter(l => l.qty > 0);
+  const total = lines.reduce((s, l) => s + l.qty * (l.paht || 0), 0);
 
-  // Suppression en masse de toutes les sessions visibles dans l'onglet courant
-  const handleBulkDelete = (sessions, label) => {
-    if (sessions.length === 0) return;
-    if (!confirm(`⚠️ Supprimer ${sessions.length} session(s) ${label} ?\n\nCette action est irréversible.`)) return;
-    if (!confirm(`Confirmer la suppression de ${sessions.length} session(s) ?`)) return;
-    if (!firebaseReady) return;
+  return (
+    <div className="card">
+      <div className="step">Étape 4 — Validation finale</div>
+      <p style={{marginBottom:12}}>
+        <strong>{supplier.name}</strong> · {lines.length} lignes · <strong>{total.toFixed(2)} € HT</strong>
+        {context && <> · <em>{context}</em></>}
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Produit</th>
+            <th className="num">Stock</th>
+            <th className="num">Ventes 7j</th>
+            <th className="num">Proposé</th>
+            <th className="num">Validé</th>
+            <th className="num">Δ</th>
+            <th className="num">€ HT</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map(l => {
+            const delta = l.qty - l.proposedMedian;
+            return (
+              <tr key={l.productId}>
+                <td>{l.produit}</td>
+                <td className="num">{l.stock}</td>
+                <td className="num">{l.ventes7j}</td>
+                <td className="num">{l.proposedMedian}</td>
+                <td className="num"><strong>{l.qty}</strong></td>
+                <td className="num">
+                  {delta === 0 ? '=' : delta > 0 
+                    ? <span className="pill pill-orange">+{delta}</span> 
+                    : <span className="pill pill-blue">{delta}</span>}
+                </td>
+                <td className="num small">{(l.qty * l.paht).toFixed(2)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="alert alert-warn" style={{marginTop:14}}>
+        ⚠️ J'enregistre tes ajustements dans le sheet d'apprentissage partagé pour améliorer mes prochaines prédictions.
+      </div>
+      <div style={{marginTop:14,display:'flex',justifyContent:'space-between'}}>
+        <button className="btn btn-secondary" onClick={onBack}>← Modifier</button>
+        <button className="btn btn-success" onClick={() => onConfirm(lines)}>✓ Valider et générer</button>
+      </div>
+    </div>
+  );
+}
 
-    const updates = {};
-    sessions.forEach(s => { updates[s.id] = null; });
-    db.ref("dispatch").update(updates).catch(err => alert("Erreur: " + err.message));
-  };
+function StepExport({ apiUrl, supplier, lines, context, onBack, onReset }) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [orderId, setOrderId] = useState(null);
+  const [marking, setMarking] = useState(false);
+  const [marked, setMarked] = useState(false);
+  const [bdcResult, setBdcResult] = useState(null);
+  const [bdcWriting, setBdcWriting] = useState(false);
 
-  // Charge toutes les sessions
+  const txtContent = lines.map(l => `${l.ean || l.productId}\t${l.qty}`).join('\n');
+  const totalAmount = lines.reduce((s, l) => s + l.qty * (l.paht || 0), 0);
+
   useEffect(() => {
-    if (!firebaseReady) {
-      setLoading(false);
-      return;
-    }
-    const ref = db.ref("dispatch");
-    const handler = (snap) => {
-      const all = snap.val() || {};
-      const list = [];
-      Object.entries(all).forEach(([sid, s]) => {
-        if (!s.meta) return;
-        const products = s.meta.products || [];
-        const state = s.state || {};
-        const total = products.length;
-        const done = Object.values(state).filter(x => x && x.done).length;
-
-        // Calcule la durée si fini
-        const timestamps = Object.values(state)
-          .filter(x => x && x.doneAt)
-          .map(x => x.doneAt)
-          .sort((a,b) => a - b);
-        const firstDone = timestamps[0];
-        const lastDone = timestamps[timestamps.length - 1];
-
-        // Opérateurs uniques
-        const ops = new Set();
-        Object.values(state).forEach(x => {
-          if (x && x.doneBy) ops.add(x.doneBy);
-        });
-
-        list.push({
-          id: sid,
-          supplier: s.meta.supplier || "?",
-          startedAt: s.meta.startedAt,
-          createdBy: s.meta.createdBy || "",
-          total,
-          done,
-          remaining: total - done,
-          // "Live" = pas encore terminé (peu importe depuis combien de temps)
-          isLive: total > 0 && done < total,
-          isFinished: done === total && total > 0,
-          firstDone,
-          lastDone,
-          durationMs: firstDone && lastDone ? (lastDone - firstDone) : 0,
-          operators: Array.from(ops),
-          products,
-          state
-        });
-      });
-      list.sort((a,b) => (b.startedAt || 0) - (a.startedAt || 0));
-      setAllSessions(list);
-      setLoading(false);
-    };
-    ref.on("value", handler);
-    return () => ref.off("value", handler);
+    if (saved) return;
+    // 1. Enregistrer la validation dans le sheet apprentissage
+    callApi(apiUrl, 'save_validation', {
+      supplier: supplier.name,
+      context: context || '',
+      userName: 'Henry',
+      lines: lines.map(l => ({
+        productId: l.productId, produit: l.produit, stock: l.stock,
+        ventes7j: l.ventes7j, proposedMedian: l.proposedMedian, validated: l.qty,
+      }))
+    }).then(r => {
+      if (r.error) setSaveError(r.error); 
+      else { setSaved(true); if (r.orderId) setOrderId(r.orderId); }
+    }).catch(e => setSaveError(e.message));
+    
+    // 2. En parallèle, écrire dans le BDC du fournisseur (colonne jaune "Commande en UVC")
+    setBdcWriting(true);
+    callApi(apiUrl, 'write_bdc', {
+      supplier: supplier.name,
+      lines: lines.map(l => ({ produit: l.produit, ean: l.ean, qty: l.qty })),
+    }).then(r => {
+      setBdcResult(r);
+    }).catch(e => {
+      setBdcResult({ ok: false, error: e.message });
+    }).finally(() => setBdcWriting(false));
   }, []);
 
-  const liveSessions = useMemo(() => allSessions.filter(s => s.isLive), [allSessions]);
-  const historySessions = useMemo(() => allSessions.filter(s => !s.isLive), [allSessions]);
+  const downloadTxt = () => {
+    const blob = new Blob([txtContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `commande_${normalizeName(supplier.name)}_${todayStr()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  const filteredHistory = useMemo(() => {
-    if (!search.trim()) return historySessions;
-    const q = stripAccents(search.toLowerCase());
-    return historySessions.filter(s =>
-      stripAccents((s.supplier || "").toLowerCase()).includes(q) ||
-      stripAccents((s.createdBy || "").toLowerCase()).includes(q) ||
-      s.operators.some(o => stripAccents(o.toLowerCase()).includes(q))
-    );
-  }, [historySessions, search]);
+  const downloadXlsx = () => {
+    const wb = XLSX.utils.book_new();
+    const data = [
+      ['GENCODE', 'CODE', 'Produits', 'Unité', 'PCB', 'CDE en UVC', 'Unité fact', 'PA HT', 'Montant HT'],
+      ...lines.map(l => [
+        l.ean || '', l.productId, l.produit, l.unite || '', l.pcb || 1,
+        l.qty, 'pièce', l.paht ? l.paht.toFixed(2) : '',
+        l.paht ? (l.paht * l.qty).toFixed(2) : ''
+      ]),
+      ['', '', '', '', '', '', '', 'Total HT', totalAmount.toFixed(2)]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(wb, ws, supplier.name.substring(0, 28));
+    XLSX.writeFile(wb, `BdC_${normalizeName(supplier.name)}_${todayStr()}.xlsx`);
+  };
 
-  // Stats globales
-  const stats = useMemo(() => {
-    const finished = allSessions.filter(s => s.isFinished && s.durationMs > 0);
-    const totalProducts = finished.reduce((sum, s) => sum + s.done, 0);
-    const totalMinutes = finished.reduce((sum, s) => sum + (s.durationMs / 60000), 0);
-    const avgCadence = totalMinutes > 0 ? (totalProducts / totalMinutes).toFixed(2) : 0;
+  const sendMail = async () => {
+    setSending(true); setError('');
+    try {
+      const body = 
+`Commande pour ${supplier.name}
+Date : ${todayStr()}
+Nombre de lignes : ${lines.length}
+Total estimé : ${totalAmount.toFixed(2)} € HT
+${context ? '\nContexte : ' + context : ''}
 
-    // Par fournisseur
-    const bySupplier = {};
-    finished.forEach(s => {
-      if (!bySupplier[s.supplier]) bySupplier[s.supplier] = { count: 0, products: 0, durationMs: 0 };
-      bySupplier[s.supplier].count++;
-      bySupplier[s.supplier].products += s.done;
-      bySupplier[s.supplier].durationMs += s.durationMs;
-    });
-
-    // Par opérateur
-    const byOperator = {};
-    finished.forEach(s => {
-      Object.values(s.state).forEach(st => {
-        if (st && st.done && st.doneBy) {
-          byOperator[st.doneBy] = (byOperator[st.doneBy] || 0) + 1;
-        }
+Fichier .txt joint à importer dans G5.
+`;
+      const r = await callApi(apiUrl, 'send_order_mail', {
+        to: 'rr@probon.org',
+        subject: `Commande fournisseur ${supplier.name} - ${todayStr()}`,
+        body,
+        attachmentName: `commande_${normalizeName(supplier.name)}_${todayStr()}.txt`,
+        attachmentContent: txtContent,
       });
-    });
-
-    return {
-      totalSessions: allSessions.length,
-      finishedSessions: finished.length,
-      totalProducts,
-      avgCadence,
-      bySupplier,
-      byOperator
-    };
-  }, [allSessions]);
-
-  return (
-    <div className="app">
-      <div className="header" style={{background: "#0d3d20"}}>
-        <div className="header-row">
-          <div>
-            <h1>🔐 Mode Admin</h1>
-            <div className="sub">{operator} • {allSessions.length} session(s) total</div>
-          </div>
-          <div className="header-actions">
-            <button className="header-btn" onClick={onClose}>← Retour</button>
-          </div>
-        </div>
-      </div>
-
-      <div className="tabs-bar">
-        <button className={`tab ${tab === "live" ? "active" : ""}`} onClick={() => setTab("live")}>
-          🔴 En cours ({liveSessions.length})
-        </button>
-        <button className={`tab ${tab === "history" ? "active" : ""}`} onClick={() => setTab("history")}>
-          📋 Historique ({historySessions.length})
-        </button>
-        <button className={`tab ${tab === "stats" ? "active" : ""}`} onClick={() => setTab("stats")}>
-          📊 Stats
-        </button>
-      </div>
-
-      <div style={{padding: 12, paddingBottom: 80}}>
-        {loading && <div style={{textAlign: "center", padding: 40, color: "#999"}}>Chargement...</div>}
-
-        {/* ----- ONGLET LIVE ----- */}
-        {tab === "live" && !loading && (
-          <>
-            {liveSessions.length === 0 && (
-              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
-                Aucun dispatch en cours actuellement
-              </div>
-            )}
-            {liveSessions.map(s => (
-              <AdminSessionCard
-                key={s.id}
-                session={s}
-                live={true}
-                onClick={() => onViewSession(s)}
-                onDelete={handleDeleteSession}
-              />
-            ))}
-            {liveSessions.length > 1 && (
-              <button
-                onClick={() => handleBulkDelete(liveSessions, "en cours")}
-                style={{
-                  width: "100%", padding: 10, marginTop: 12,
-                  background: "#ffebee", color: "#c62828",
-                  border: "1px solid #ffcdd2", borderRadius: 8,
-                  fontSize: 13, fontWeight: 600
-                }}
-              >
-                🗑 Annuler toutes les sessions en cours ({liveSessions.length})
-              </button>
-            )}
-          </>
-        )}
-
-        {/* ----- ONGLET HISTORIQUE ----- */}
-        {tab === "history" && !loading && (
-          <>
-            <div style={{marginBottom: 12}}>
-              <input
-                type="text"
-                placeholder="🔍 Chercher par fournisseur, opérateur..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  width: "100%", padding: 10, fontSize: 14,
-                  border: "1.5px solid #ddd", borderRadius: 8
-                }}
-              />
-            </div>
-            {filteredHistory.length === 0 && (
-              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
-                {search ? "Aucun résultat" : "Aucune session terminée"}
-              </div>
-            )}
-            {filteredHistory.map(s => (
-              <AdminSessionCard
-                key={s.id}
-                session={s}
-                live={false}
-                onClick={() => onViewSession(s)}
-                onDelete={handleDeleteSession}
-              />
-            ))}
-            {filteredHistory.length > 1 && (
-              <button
-                onClick={() => handleBulkDelete(filteredHistory, search ? "filtrée(s)" : "de l'historique")}
-                style={{
-                  width: "100%", padding: 10, marginTop: 12,
-                  background: "#ffebee", color: "#c62828",
-                  border: "1px solid #ffcdd2", borderRadius: 8,
-                  fontSize: 13, fontWeight: 600
-                }}
-              >
-                🗑 Supprimer {search ? `les ${filteredHistory.length} sessions filtrées` : `toutes les sessions (${filteredHistory.length})`}
-              </button>
-            )}
-          </>
-        )}
-
-        {/* ----- ONGLET STATS ----- */}
-        {tab === "stats" && !loading && (
-          <>
-            <div className="recap-card">
-              <h3>📊 Vue d'ensemble</h3>
-              <div className="recap-stat">
-                <span className="label">Total sessions</span>
-                <span className="value">{stats.totalSessions}</span>
-              </div>
-              <div className="recap-stat">
-                <span className="label">Sessions terminées</span>
-                <span className="value">{stats.finishedSessions}</span>
-              </div>
-              <div className="recap-stat">
-                <span className="label">Produits dispatchés (total)</span>
-                <span className="value">{stats.totalProducts}</span>
-              </div>
-              <div className="recap-stat">
-                <span className="label">Cadence moyenne</span>
-                <span className="value">{stats.avgCadence} prod/min</span>
-              </div>
-            </div>
-
-            {Object.keys(stats.bySupplier).length > 0 && (
-              <div className="recap-card">
-                <h3>🏭 Par fournisseur</h3>
-                {Object.entries(stats.bySupplier)
-                  .sort((a,b) => b[1].count - a[1].count)
-                  .map(([name, s]) => {
-                    const cadence = s.durationMs > 0 ? (s.products / (s.durationMs / 60000)).toFixed(1) : "-";
-                    return (
-                      <div className="recap-stat" key={name}>
-                        <span className="label">
-                          <b>{name}</b>
-                          <div style={{fontSize: 11, color: "#999"}}>
-                            {s.count} session(s) • {s.products} prod • {cadence} prod/min
-                          </div>
-                        </span>
-                        <span className="value">{s.count}</span>
-                      </div>
-                    );
-                })}
-              </div>
-            )}
-
-            {Object.keys(stats.byOperator).length > 0 && (
-              <div className="recap-card">
-                <h3>👥 Par opérateur</h3>
-                {Object.entries(stats.byOperator)
-                  .sort((a,b) => b[1] - a[1])
-                  .map(([name, count]) => (
-                    <div className="recap-stat" key={name}>
-                      <span className="label">{name}</span>
-                      <span className="value">{count} produits</span>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AdminSessionCard({ session, live, onClick, onDelete }) {
-  const s = session;
-  const progress = s.total > 0 ? (s.done / s.total) * 100 : 0;
-  const date = s.startedAt ? new Date(s.startedAt) : null;
-  const dateStr = date ? date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
-  const timeStr = date ? date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
-
-  return (
-    <div
-      style={{
-        background: "#fff",
-        border: "1.5px solid " + (live ? "#d32f2f" : "#e6e8ec"),
-        borderRadius: 10,
-        padding: 12,
-        marginBottom: 8
-      }}
-    >
-      <div onClick={onClick} style={{cursor: "pointer"}}>
-        <div style={{display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 6}}>
-          <div>
-            {live && <span style={{
-              display: "inline-block", background: "#d32f2f", color: "#fff",
-              fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 10,
-              marginRight: 6
-            }}>● LIVE</span>}
-            <span style={{fontWeight: 700, fontSize: 14}}>{s.supplier}</span>
-          </div>
-          <div style={{fontSize: 11, color: "#999"}}>
-            {dateStr} {timeStr}
-          </div>
-        </div>
-
-        <div style={{fontSize: 11, color: "#666", marginBottom: 8}}>
-          Par <b>{s.createdBy || "?"}</b>
-          {s.operators.length > 1 && ` + ${s.operators.filter(o => o !== s.createdBy).join(", ")}`}
-        </div>
-
-        <div style={{display: "flex", gap: 12, fontSize: 12, marginBottom: 6}}>
-          <span>📦 <b>{s.done}/{s.total}</b></span>
-          {s.durationMs > 0 && <span>⏱ {fmtDuration(s.durationMs)}</span>}
-          {s.durationMs > 0 && s.done > 0 && (
-            <span>⚡ {(s.done / (s.durationMs / 60000)).toFixed(1)}/min</span>
-          )}
-        </div>
-
-        <div className="progress-bar">
-          <div className="progress-fill" style={{
-            width: `${progress}%`,
-            background: progress === 100 ? "#4caf50" : (live ? "#ff9800" : "#1a4d2e")
-          }}></div>
-        </div>
-      </div>
-
-      {/* Bouton supprimer rapide */}
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete(s); }}
-        style={{
-          marginTop: 8,
-          width: "100%",
-          padding: 6,
-          fontSize: 12,
-          fontWeight: 600,
-          background: "#ffebee",
-          color: "#c62828",
-          border: "1px solid #ffcdd2",
-          borderRadius: 6,
-          cursor: "pointer"
-        }}
-      >
-        🗑 {live ? "Annuler cette session" : "Supprimer"}
-      </button>
-    </div>
-  );
-}
-
-/* =========================================================================
-   ADMIN SESSION DETAIL (vue détaillée d'une session pour admin)
-   ========================================================================= */
-
-function AdminSessionDetail({ session, onClose }) {
-  const s = session;
-  const date = s.startedAt ? new Date(s.startedAt) : null;
-  const dateStr = date ? date.toLocaleString("fr-FR") : "";
-
-  const products = s.products || [];
-  const productsWithKeys = useMemo(() => {
-    return products.map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }));
-  }, [products]);
-
-  const doneProducts = productsWithKeys.filter(p => s.state[p._pkey]?.done);
-  const notDoneProducts = productsWithKeys.filter(p => !s.state[p._pkey]?.done);
-  const adjusted = doneProducts.filter(p => {
-    const st = s.state[p._pkey];
-    return (st.qtyRob !== undefined && st.qtyRob !== p.rob) ||
-           (st.qtyTol !== undefined && st.qtyTol !== p.tol) ||
-           (st.qtyPdp !== undefined && st.qtyPdp !== p.pdp);
-  });
-
-  const handleDelete = () => {
-    const msg = s.isLive
-      ? `⚠️ ATTENTION : supprimer cette session EN COURS de "${s.supplier}" ?\n\nLes opérateurs qui sont dessus vont perdre leur travail.\n\nCette action est IRRÉVERSIBLE.`
-      : `Supprimer définitivement la session "${s.supplier}" du ${dateStr} ?\n\nCette action est irréversible.`;
-    if (!confirm(msg)) return;
-    if (!confirm("Es-tu vraiment sûr ? Tape OK pour confirmer.")) return;
-
-    if (firebaseReady) {
-      db.ref(`dispatch/${s.id}`).remove()
-        .then(() => {
-          alert("Session supprimée.");
-          onClose();
-        })
-        .catch(err => alert("Erreur: " + err.message));
-    } else {
-      alert("Firebase non disponible");
+      if (r.error) throw new Error(r.error);
+      setSent(true);
+      // Marquer auto comme "sent" (envoyée, pas encore validée comme passée)
+      if (orderId) {
+        await callApi(apiUrl, 'mark_as_sent', { orderId, status: 'sent' });
+      }
+    } catch (e) {
+      setError(`Erreur envoi : ${e.message}. Tu peux télécharger le .txt et l'envoyer manuellement.`);
     }
+    setSending(false);
+  };
+
+  const markAsPassed = async () => {
+    if (!orderId) { setError('Pas d\'orderId, recharge la page.'); return; }
+    setMarking(true);
+    try {
+      const r = await callApi(apiUrl, 'mark_as_sent', { orderId, status: 'passed' });
+      if (r.error) throw new Error(r.error);
+      setMarked(true);
+    } catch (e) {
+      setError(`Erreur : ${e.message}`);
+    }
+    setMarking(false);
   };
 
   return (
-    <div className="app">
-      <div className="header" style={{background: "#0d3d20"}}>
-        <div className="header-row">
-          <div>
-            <h1>{s.supplier}</h1>
-            <div className="sub">{dateStr}</div>
-          </div>
-          <div className="header-actions">
-            <button className="header-btn" onClick={onClose}>← Retour</button>
-          </div>
-        </div>
+    <div className="card">
+      <div className="step">Étape 5 — Export & envoi</div>
+      <div className="alert alert-success">
+        ✓ Commande prête pour <strong>{supplier.name}</strong> — {lines.length} lignes — {totalAmount.toFixed(2)} € HT
+        {saved && <span style={{marginLeft:10}} className="pill pill-green">Apprentissage enregistré</span>}
+        {saveError && <span style={{marginLeft:10}} className="pill pill-red">Apprentissage : {saveError}</span>}
       </div>
-
-      <div style={{padding: 12, paddingBottom: 80}}>
-        <div className="recap-card">
-          <h3>Vue d'ensemble</h3>
-          <div className="recap-stat">
-            <span className="label">Créé par</span>
-            <span className="value">{s.createdBy || "?"}</span>
-          </div>
-          <div className="recap-stat">
-            <span className="label">Opérateurs</span>
-            <span className="value">{s.operators.join(", ") || "-"}</span>
-          </div>
-          <div className="recap-stat">
-            <span className="label">Avancement</span>
-            <span className="value">{s.done}/{s.total}</span>
-          </div>
-          {s.durationMs > 0 && (
-            <div className="recap-stat">
-              <span className="label">Durée</span>
-              <span className="value">{fmtDuration(s.durationMs)}</span>
-            </div>
-          )}
-          {s.durationMs > 0 && s.done > 0 && (
-            <div className="recap-stat">
-              <span className="label">Cadence</span>
-              <span className="value">{(s.done / (s.durationMs / 60000)).toFixed(2)} prod/min</span>
-            </div>
-          )}
+      
+      {/* Résultat de l'écriture dans le BDC du fournisseur */}
+      {bdcWriting && (
+        <div className="alert alert-info">
+          <span className="loader"/> Écriture dans le BDC du fournisseur...
         </div>
-
-        {notDoneProducts.length > 0 && (
-          <div className="recap-card">
-            <h3>⏳ Non traités ({notDoneProducts.length})</h3>
-            {notDoneProducts.map(p => (
-              <div className="anomaly-item" key={p._pkey}>
-                <div className="product">{p.designation}</div>
-                <div className="detail">Reçu: {p.recue} • ROB {p.rob} / TOL {p.tol} / PDP {p.pdp}</div>
+      )}
+      {bdcResult && bdcResult.ok && (
+        <div className="alert alert-success">
+          ✓ BDC rempli : <strong>{bdcResult.fileName}</strong> · 
+          {bdcResult.matchedCount} ligne{bdcResult.matchedCount > 1 ? 's' : ''} écrite{bdcResult.matchedCount > 1 ? 's' : ''} dans la colonne jaune
+          {bdcResult.notMatchedCount > 0 && (
+            <> · <span className="pill pill-orange">⚠️ {bdcResult.notMatchedCount} non matché{bdcResult.notMatchedCount > 1 ? 's' : ''}</span></>
+          )}
+          {bdcResult.fileUrl && (
+            <> · <a href={bdcResult.fileUrl} target="_blank" rel="noopener" style={{marginLeft:6}}>Ouvrir le BDC ↗</a></>
+          )}
+          {bdcResult.notMatchedCount > 0 && (
+            <details style={{marginTop:8}}>
+              <summary className="small" style={{cursor:'pointer'}}>Voir les produits non matchés</summary>
+              <ul className="small" style={{marginTop:6,paddingLeft:18}}>
+                {bdcResult.notMatched.map((nm, i) => (
+                  <li key={i}>{nm.produit} (qté {nm.qty})</li>
+                ))}
+              </ul>
+              <div className="small" style={{marginTop:6,fontStyle:'italic'}}>
+                Vérifie que ces produits sont bien dans le BDC, avec le même nom que dans le stock.
               </div>
-            ))}
-          </div>
-        )}
-
-        {adjusted.length > 0 && (
-          <div className="recap-card">
-            <h3>✎ Quantités ajustées ({adjusted.length})</h3>
-            {adjusted.map(p => {
-              const st = s.state[p._pkey];
-              return (
-                <div className="anomaly-item" key={p._pkey}>
-                  <div className="product">{p.designation}</div>
-                  <div className="detail">
-                    Prévu: {p.rob}/{p.tol}/{p.pdp} →
-                    Réel: {st.qtyRob ?? p.rob}/{st.qtyTol ?? p.tol}/{st.qtyPdp ?? p.pdp}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="recap-card">
-          <h3>📄 Générer les BL PDF</h3>
-          <button
-            className="btn-primary"
-            onClick={() => generateAllBLs(s, productsWithKeys)}
-            style={{marginBottom: 8}}
-          >
-            📥 Télécharger les 3 BL (ROB / TOL / PDP)
-          </button>
-          <div style={{display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6}}>
-            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "rob")}>ROB</button>
-            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "tol")}>TOL</button>
-            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "pdp")}>PDP</button>
+            </details>
+          )}
+        </div>
+      )}
+      {bdcResult && !bdcResult.ok && (
+        <div className="alert alert-warn">
+          ⚠️ BDC non rempli automatiquement : {bdcResult.error}
+          <div className="small" style={{marginTop:4}}>
+            Utilise le .txt ci-dessous pour reporter manuellement dans le BDC fournisseur.
           </div>
         </div>
-
-        {/* Zone dangereuse */}
-        <div className="recap-card" style={{border: "1.5px solid #d32f2f"}}>
-          <h3 style={{color: "#d32f2f"}}>⚠️ Zone dangereuse</h3>
-          <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
-            {s.isLive
-              ? "Cette session est en cours. La supprimer arrêtera le travail des opérateurs connectés."
-              : "Supprimer définitivement cette session de l'historique. Action irréversible."
-            }
-          </p>
-          <button
-            className="btn-primary"
-            onClick={handleDelete}
-            style={{background: "#d32f2f"}}
-          >
-            🗑 {s.isLive ? "Annuler ce dispatch en cours" : "Supprimer cette session"}
-          </button>
-        </div>
+      )}
+      
+      <h3 style={{marginBottom:8,marginTop:14,fontSize:14}}>📄 Fichier .txt (à importer dans G5)</h3>
+      <textarea readOnly value={txtContent} style={{fontFamily:'monospace',fontSize:12,minHeight:120}}/>
+      <div className="toolbar" style={{marginTop:12}}>
+        <button className="btn" onClick={downloadTxt}>⬇ .txt</button>
+        <button className="btn btn-secondary" onClick={downloadXlsx}>⬇ BDC .xlsx</button>
+        <button className="btn btn-warn" onClick={sendMail} disabled={sending || sent}>
+          {sending ? <><span className="loader"/> Envoi...</> : sent ? '✓ Mail envoyé' : '📧 Envoyer à rr@probon.org'}
+        </button>
+      </div>
+      {error && <div className="alert alert-error" style={{marginTop:12}}>{error}</div>}
+      
+      <div style={{marginTop:18,padding:14,background:'#f0fff4',border:'1px solid #c6f6d5',borderRadius:6}}>
+        <strong>Une fois la commande effectivement passée au fournisseur :</strong>
+        <div className="small" style={{marginBottom:8}}>Clique sur le bouton ci-dessous pour la marquer comme "passée" dans le tableau de bord.</div>
+        <button className="btn btn-success" onClick={markAsPassed} disabled={!orderId || marking || marked}>
+          {marking ? <><span className="loader"/> Enregistrement...</> : marked ? '✓ Marquée comme passée' : '✓ Commande passée au fournisseur'}
+        </button>
+      </div>
+      
+      <div style={{marginTop:18,display:'flex',justifyContent:'space-between'}}>
+        <button className="btn btn-secondary" onClick={onBack}>← Retour</button>
+        <button className="btn" onClick={onReset}>↻ Tableau de bord</button>
       </div>
     </div>
   );
 }
-
-/* =========================================================================
-   PDF GENERATION (BL par magasin)
-   ========================================================================= */
-
-function generateBL(session, productsWithKeys, store) {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-
-  const storeName = store.toUpperCase();
-  const storeFullName = { rob: "ROBESPIERRE", tol: "TOLBIAC", pdp: "PORTE DE PANTIN" }[store];
-
-  const date = session.startedAt ? new Date(session.startedAt) : new Date();
-  const dateStr = date.toLocaleDateString("fr-FR");
-
-  // Header
-  doc.setFillColor(26, 77, 46);
-  doc.rect(0, 0, 210, 25, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont(undefined, "bold");
-  doc.text("KELBONGOO", 14, 12);
-  doc.setFontSize(11);
-  doc.setFont(undefined, "normal");
-  doc.text("Bon de Livraison Magasin", 14, 19);
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(20);
-  doc.setFont(undefined, "bold");
-  doc.text(storeName, 196, 15, { align: "right" });
-
-  // Info section
-  doc.setTextColor(0, 0, 0);
-  doc.setFontSize(10);
-  doc.setFont(undefined, "normal");
-
-  let y = 35;
-  doc.text(`Magasin destinataire :`, 14, y);
-  doc.setFont(undefined, "bold");
-  doc.text(storeFullName, 60, y);
-
-  y += 6;
-  doc.setFont(undefined, "normal");
-  doc.text(`Fournisseur :`, 14, y);
-  doc.setFont(undefined, "bold");
-  doc.text(session.supplier || "?", 60, y);
-
-  y += 6;
-  doc.setFont(undefined, "normal");
-  doc.text(`Date dispatch :`, 14, y);
-  doc.setFont(undefined, "bold");
-  doc.text(dateStr, 60, y);
-
-  y += 6;
-  doc.setFont(undefined, "normal");
-  doc.text(`Préparé par :`, 14, y);
-  doc.setFont(undefined, "bold");
-  doc.text((session.operators || []).join(", ") || session.createdBy || "-", 60, y);
-
-  y += 10;
-
-  // Filtre les produits avec quantité > 0 pour ce magasin
-  const items = productsWithKeys
-    .map(p => {
-      const st = session.state[p._pkey] || {};
-      const qty = st[`qty${storeName === "ROB" ? "Rob" : storeName === "TOL" ? "Tol" : "Pdp"}`];
-      const finalQty = qty !== undefined ? qty : p[store];
-      return { ...p, _qty: finalQty, _done: !!st.done };
-    })
-    .filter(p => p._qty > 0)
-    .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
-
-  // Tableau produits
-  doc.autoTable({
-    startY: y,
-    head: [["Code article", "Désignation", "Quantité", "✓"]],
-    body: items.map(p => [
-      p.article || "-",
-      p.designation,
-      String(p._qty),
-      p._done ? "✓" : ""
-    ]),
-    theme: "striped",
-    headStyles: {
-      fillColor: [26, 77, 46],
-      textColor: 255,
-      fontStyle: "bold",
-      fontSize: 9
-    },
-    styles: {
-      fontSize: 9,
-      cellPadding: 2
-    },
-    columnStyles: {
-      0: { cellWidth: 32, fontStyle: "bold" },
-      1: { cellWidth: 110 },
-      2: { cellWidth: 20, halign: "center", fontStyle: "bold" },
-      3: { cellWidth: 12, halign: "center" }
-    },
-    margin: { left: 14, right: 14 }
-  });
-
-  // Pied de page - total
-  const totalQty = items.reduce((sum, p) => sum + p._qty, 0);
-  const finalY = doc.lastAutoTable.finalY + 5;
-
-  doc.setFillColor(240, 240, 240);
-  doc.rect(14, finalY, 182, 10, "F");
-  doc.setFontSize(11);
-  doc.setFont(undefined, "bold");
-  doc.text(`TOTAL : ${items.length} référence(s) — ${totalQty} unité(s)`, 18, finalY + 7);
-
-  // Zone signatures
-  const sigY = finalY + 20;
-  doc.setFontSize(9);
-  doc.setFont(undefined, "normal");
-  doc.text("Signature préparateur :", 14, sigY);
-  doc.text("Signature réception magasin :", 110, sigY);
-  doc.rect(14, sigY + 3, 80, 25);
-  doc.rect(110, sigY + 3, 80, 25);
-
-  // Footer
-  doc.setFontSize(8);
-  doc.setTextColor(150, 150, 150);
-  doc.text(
-    `Généré le ${new Date().toLocaleString("fr-FR")} • Session: ${session.id}`,
-    14, 287
-  );
-
-  const filename = `BL_${storeName}_${(session.supplier||"").replace(/[^a-zA-Z0-9]/g,"")}_${dateStr.replace(/\//g, "-")}.pdf`;
-  doc.save(filename);
-}
-
-function generateAllBLs(session, productsWithKeys) {
-  generateBL(session, productsWithKeys, "rob");
-  setTimeout(() => generateBL(session, productsWithKeys, "tol"), 300);
-  setTimeout(() => generateBL(session, productsWithKeys, "pdp"), 600);
-}
-
-/* =========================================================================
-   APP ROOT
-   ========================================================================= */
 
 function App() {
-  const [operator, setOperator] = useState(localStorage.getItem("dispatch_operator") || "");
-  const [sessionId, setSessionId] = useState(localStorage.getItem("dispatch_sessionId") || "");
-  const [supplier, setSupplier] = useState(localStorage.getItem("dispatch_supplier") || "");
-  const [products, setProducts] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("dispatch_products") || "[]"); }
-    catch { return []; }
-  });
-  const [view, setView] = useState("dispatch"); // dispatch | recap | admin | adminSession
-  const [recapData, setRecapData] = useState(null);
-  const [adminViewingSession, setAdminViewingSession] = useState(null);
+  const [apiUrl, setApiUrl] = useState(DEFAULT_APPS_SCRIPT_URL);
+  const [configExpanded, setConfigExpanded] = useState(!DEFAULT_APPS_SCRIPT_URL); // ouvert si pas d'URL
+  const [data, setData] = useState(null);
+  const [learnings, setLearnings] = useState({ entries: [] });
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [step, setStep] = useState(0);
+  const [supplier, setSupplier] = useState(null);
+  const [productAnalyses, setProductAnalyses] = useState(null);
+  const [selectedScenario, setSelectedScenario] = useState({});
+  const [overrides, setOverrides] = useState({});
+  const [context, setContext] = useState('');
+  const [finalLines, setFinalLines] = useState(null);
 
-  // Persistance locale du contexte
+  const dataStatus = useMemo(() => {
+    if (!data) return { Cadencier: 'load', Stats: 'load', Produits: 'load', Stock: 'load' };
+    return {
+      Cadencier: data.cadencier?.length > 0 ? 'ok' : 'err',
+      Stats: data.statsVentes?.products?.length > 0 ? 'ok' : 'err',
+      Produits: data.products?.products?.length > 0 ? 'ok' : 'err',
+      Stock: data.stock?.rows?.length > 0 ? 'ok' : 'err',
+    };
+  }, [data]);
+
+  // Charger depuis localStorage AU DÉMARRAGE pour affichage instantané
   useEffect(() => {
-    if (sessionId) localStorage.setItem("dispatch_sessionId", sessionId);
-    if (supplier) localStorage.setItem("dispatch_supplier", supplier);
-    if (products.length > 0) localStorage.setItem("dispatch_products", JSON.stringify(products));
-  }, [sessionId, supplier, products]);
-
-  const handleSessionStart = (sid, sup, prods) => {
-    setSessionId(sid);
-    setSupplier(sup);
-    setProducts(prods);
-    setView("dispatch");
-
-    if (firebaseReady) {
-      db.ref(`dispatch/${sid}/meta`).set({
-        supplier: sup,
-        startedAt: Date.now(),
-        products: prods,
-        createdBy: operator
-      });
-    }
-
-    // Notification Telegram de démarrage (via Apps Script, non bloquant)
+    if (!apiUrl) return;
     try {
-      fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "log-dispatch-start",
-          sessionId: sid,
-          supplier: sup,
-          operator: operator,
-          total: prods.length,
-          startedAt: new Date().toISOString()
-        })
-      }).catch(e => console.warn("Telegram start failed:", e));
+      const cached = localStorage.getItem('kbg_cache_data_v1');
+      const cachedLearn = localStorage.getItem('kbg_cache_learnings_v1');
+      if (cached) setData(JSON.parse(cached));
+      if (cachedLearn) setLearnings(JSON.parse(cachedLearn));
+    } catch (_) {}
+  }, []);
+
+  const loadAll = useCallback(async (silent) => {
+    if (!apiUrl) return;
+    if (silent) setRefreshing(true); else setLoading(true);
+    setError('');
+    try {
+      const [init, learn] = await Promise.all([
+        callApi(apiUrl, 'init_light'),
+        callApi(apiUrl, 'get_learnings').catch(() => ({ entries: [] })),
+      ]);
+      if (init.error) throw new Error(init.error);
+      setData(init);
+      setLearnings(learn);
+      // Sauvegarder dans localStorage pour la prochaine fois
+      try {
+        localStorage.setItem('kbg_cache_data_v1', JSON.stringify(init));
+        localStorage.setItem('kbg_cache_learnings_v1', JSON.stringify(learn));
+        localStorage.setItem('kbg_cache_time_v1', String(Date.now()));
+      } catch (_) {}
     } catch (e) {
-      console.warn("Telegram start error:", e);
+      if (!silent) setError(`Chargement impossible : ${e.message}`);
     }
-  };
+    setLoading(false);
+    setRefreshing(false);
+  }, [apiUrl]);
 
-  const handleJoinSession = (sid) => {
-    if (!firebaseReady) return;
-    db.ref(`dispatch/${sid}/meta`).once("value").then(snap => {
-      const m = snap.val();
-      if (m) {
-        setSessionId(sid);
-        setSupplier(m.supplier || "Fournisseur");
-        setProducts(m.products || []);
-        setView("dispatch");
-      }
-    });
-  };
-
-  const handleFinish = (state, productsWithKeys) => {
-    setRecapData({ state, products: productsWithKeys });
-    setView("recap");
-  };
-
-  // QUITTER la session courante SANS rien supprimer (les données restent dans Firebase
-  // et seront visibles par les autres opérateurs / dans l'admin)
-  const handleLeaveSession = () => {
-    localStorage.removeItem("dispatch_sessionId");
-    localStorage.removeItem("dispatch_supplier");
-    localStorage.removeItem("dispatch_products");
-    setSessionId("");
-    setSupplier("");
-    setProducts([]);
-    setRecapData(null);
-    setView("dispatch");
-  };
-
-  // DÉCONNEXION : oublie l'opérateur et revient à l'écran de login
-  const handleLogout = () => {
-    if (!confirm("Te déconnecter ? Tu pourras te reconnecter avec un autre prénom.")) return;
-    localStorage.removeItem("dispatch_operator");
-    localStorage.removeItem("dispatch_sessionId");
-    localStorage.removeItem("dispatch_supplier");
-    localStorage.removeItem("dispatch_products");
-    setOperator("");
-    setSessionId("");
-    setSupplier("");
-    setProducts([]);
-    setRecapData(null);
-    setView("dispatch");
-  };
-
-  if (!operator) {
-    return <LoginScreen onLogin={setOperator} />;
-  }
-
-  // Mode Admin : détail d'une session
-  if (view === "adminSession" && adminViewingSession) {
-    return (
-      <AdminSessionDetail
-        session={adminViewingSession}
-        onClose={() => { setAdminViewingSession(null); setView("admin"); }}
-      />
-    );
-  }
-
-  // Mode Admin : liste / stats
-  if (view === "admin") {
-    if (!isAdmin(operator)) {
-      return (
-        <div className="screen-center">
-          <div className="card">
-            <h3>Accès refusé</h3>
-            <p style={{color: "#666", fontSize: 13}}>Tu n'as pas les droits administrateur.</p>
-            <button className="btn-primary" onClick={() => setView("dispatch")}>Retour</button>
-          </div>
-        </div>
-      );
+  // Au premier render : si on a du cache, ne pas mettre loading=true mais rafraîchir en background
+  useEffect(() => { 
+    if (!apiUrl) return;
+    const hasCache = localStorage.getItem('kbg_cache_data_v1');
+    if (hasCache) {
+      loadAll(true); // silent refresh
+    } else {
+      loadAll(false); // full loading
     }
-    return (
-      <AdminScreen
-        operator={operator}
-        onClose={() => setView("dispatch")}
-        onViewSession={(s) => { setAdminViewingSession(s); setView("adminSession"); }}
-      />
-    );
-  }
+  }, [apiUrl]);
 
-  if (!sessionId || products.length === 0) {
-    return (
-      <UploadScreen
-        operator={operator}
-        onSessionStart={handleSessionStart}
-        onJoinSession={handleJoinSession}
-        onOpenAdmin={() => setView("admin")}
-        onLogout={handleLogout}
-      />
-    );
-  }
-
-  if (view === "recap" && recapData) {
-    return (
-      <RecapScreen
-        sessionId={sessionId}
-        operator={operator}
-        supplier={supplier}
-        products={recapData.products}
-        state={recapData.state}
-        onClose={() => setView("dispatch")}
-        onLeave={handleLeaveSession}
-      />
-    );
-  }
+  const reset = () => {
+    setStep(0); setSupplier(null); setProductAnalyses(null);
+    setSelectedScenario({}); setOverrides({}); setFinalLines(null); setContext('');
+  };
 
   return (
-    <DispatchScreen
-      sessionId={sessionId}
-      operator={operator}
-      supplier={supplier}
-      products={products}
-      onFinish={handleFinish}
-      onLeave={handleLeaveSession}
-    />
+    <div className="container">
+      <Header step={step} dataStatus={dataStatus} stockDate={data?.stock?.date}/>
+      <ConfigPanel apiUrl={apiUrl} setApiUrl={setApiUrl} onReload={loadAll} 
+        expanded={configExpanded} setExpanded={setConfigExpanded}/>
+      {refreshing && (
+        <div style={{fontSize:11,color:'#718096',textAlign:'center',marginBottom:8}}>
+          <span className="loader" style={{width:10,height:10}}/> Actualisation en arrière-plan...
+        </div>
+      )}
+      {loading && !data && <div className="card"><span className="loader"/> Chargement des données depuis le Drive (peut prendre 15-30s)...</div>}
+      {error && <div className="card"><div className="alert alert-error">{error}</div>
+        <button className="btn" onClick={() => loadAll(false)}>Réessayer</button>
+      </div>}
+      {data && (
+        <>
+          {step === 0 && (
+            <StepDashboard 
+              apiUrl={apiUrl} data={data}
+              onSelectSupplier={(s) => { setSupplier(s); setStep(2); }}
+              onSkipToList={() => setStep(1)}
+              onRefresh={() => loadAll(false)}
+            />
+          )}
+          {step === 1 && (
+            <StepSupplier data={data} 
+              onSelect={(s) => { setSupplier(s); setStep(2); }}
+              onBack={() => setStep(0)}/>
+          )}
+          {step === 2 && supplier && (
+            <StepPrediction supplier={supplier} data={data} learnings={learnings} apiUrl={apiUrl}
+              onValidate={(pa, sel, ovr, ctx) => {
+                setProductAnalyses(pa); setSelectedScenario(sel); setOverrides(ovr);
+                setContext(ctx); setStep(3);
+              }}
+              onBack={() => setStep(1)}/>
+          )}
+          {step === 3 && productAnalyses && (
+            <StepValidate supplier={supplier} productAnalyses={productAnalyses}
+              selectedScenario={selectedScenario} overrides={overrides} context={context}
+              onConfirm={(lines) => { setFinalLines(lines); setStep(4); }}
+              onBack={() => setStep(2)}/>
+          )}
+          {step === 4 && finalLines && (
+            <StepExport apiUrl={apiUrl} supplier={supplier} lines={finalLines} context={context}
+              onBack={() => setStep(3)} onReset={reset}/>
+          )}
+        </>
+      )}
+      <div style={{textAlign:'center',marginTop:20,color:'#a0aec0',fontSize:11}}>
+        Kelbongoo Commandes v3 · {data?.stock?.date && `Stock du ${data.stock.date}`} · 
+        {learnings?.entries?.length || 0} validations en apprentissage
+      </div>
+    </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
