@@ -1513,6 +1513,54 @@ function DispatchScreen({ sessionId, operator, supplier, products, storeColumns,
   const [showDone, setShowDone] = useState(false); // onglet Dispatchés
   const searchInputRef = useRef(null);
 
+  // FALLBACK CRITIQUE : si storeColumns est vide (vieille session, ou erreur),
+  // on les reconstruit depuis les produits.
+  // - Priorité 1 : storeColumns de la session Firebase (meta.storeColumns)
+  // - Priorité 2 : storeColumns passé en prop
+  // - Priorité 3 : reconstruit depuis les clés de products[0].stores
+  // - Priorité 4 (compat ancien format): ROB/TOL/PDP par défaut si produits ont rob/tol/pdp
+  const effectiveStoreColumns = useMemo(() => {
+    // 1. Firebase meta
+    if (meta && Array.isArray(meta.storeColumns) && meta.storeColumns.length > 0) {
+      return meta.storeColumns;
+    }
+    // 2. Prop
+    if (Array.isArray(storeColumns) && storeColumns.length > 0) {
+      return storeColumns;
+    }
+    // 3. Reconstruction depuis products[0].stores
+    if (products.length > 0 && products[0].stores) {
+      return Object.keys(products[0].stores).map(code => ({
+        code,
+        label: code,
+        needsNaming: false
+      }));
+    }
+    // 4. Compat ancien format (rob/tol/pdp directement sur le produit)
+    if (products.length > 0 && (products[0].rob !== undefined ||
+        products[0].tol !== undefined || products[0].pdp !== undefined)) {
+      return [
+        { code: "ROB", label: "ROB", needsNaming: false },
+        { code: "TOL", label: "TOL", needsNaming: false },
+        { code: "PDP", label: "PDP", needsNaming: false }
+      ];
+    }
+    return [];
+  }, [meta, storeColumns, products]);
+
+  // Adapte les produits pour qu'ils aient TOUS un champ `stores` (compat ancien format)
+  const normalizedProducts = useMemo(() => {
+    return products.map(p => {
+      if (p.stores) return p;
+      // Compat : si rob/tol/pdp directement → on construit stores
+      const stores = {};
+      if (p.rob !== undefined) stores["ROB"] = p.rob;
+      if (p.tol !== undefined) stores["TOL"] = p.tol;
+      if (p.pdp !== undefined) stores["PDP"] = p.pdp;
+      return { ...p, stores };
+    });
+  }, [products]);
+
   // Sauvegarde le mode choisi
   useEffect(() => {
     localStorage.setItem("dispatch_view_mode", viewMode);
@@ -1530,12 +1578,12 @@ function DispatchScreen({ sessionId, operator, supplier, products, storeColumns,
     return () => clearInterval(t);
   }, [state, operator, lockRow]);
 
-  // Tri alphabétique
+  // Tri alphabétique - utilise normalizedProducts pour garantir le champ stores
   const sortedProducts = useMemo(() => {
-    return products
+    return normalizedProducts
       .map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }))
       .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
-  }, [products]);
+  }, [normalizedProducts]);
 
   // Sépare les produits dispatchés des non dispatchés
   const { notDoneProducts, doneProducts } = useMemo(() => {
@@ -1712,7 +1760,7 @@ function DispatchScreen({ sessionId, operator, supplier, products, storeColumns,
                   pkey={p._pkey}
                   status={state[p._pkey] || {}}
                   operator={operator}
-                  storeColumns={storeColumns}
+                  storeColumns={effectiveStoreColumns}
                   onLock={lockRow}
                   onUnlock={unlockRow}
                   onValidate={handleValidateScan}
@@ -1758,7 +1806,7 @@ function DispatchScreen({ sessionId, operator, supplier, products, storeColumns,
                 pkey={p._pkey}
                 status={state[p._pkey] || {}}
                 operator={operator}
-                storeColumns={storeColumns}
+                storeColumns={effectiveStoreColumns}
                 onLock={lockRow}
                 onUnlock={unlockRow}
                 onValidate={handleValidate}
@@ -1788,7 +1836,7 @@ function DispatchScreen({ sessionId, operator, supplier, products, storeColumns,
         <EditModal
           product={editingProduct}
           status={state[editingKey] || {}}
-          storeColumns={storeColumns}
+          storeColumns={effectiveStoreColumns}
           allowReceivedEdit={editAllowReceived}
           onSave={handleEditSave}
           onClose={handleEditCancel}
