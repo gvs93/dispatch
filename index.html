@@ -470,45 +470,59 @@ const parseG5Cell = (v) => {
   return isNaN(n) ? 0 : Math.round(n); // arrondit (36.000000 -> 36)
 };
 
-// Détecte la structure du fichier en cherchant la ligne d'en-têtes
+// Détecte la structure du fichier - magasins dynamiques
+// Retourne :
+//   - products : tableau de produits avec champ `stores` dynamique (map)
+//   - storeColumns : tableau de définitions de colonnes magasin
+//       { code: "ROB" ou "MAGASIN_04" (uniq), label: "ROB" ou "Magasin 04",
+//         needsNaming: bool (true si non reconnu, demande à l'utilisateur) }
 function parseExcelFile(workbook) {
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 
-  // Fonction helper : détecte si une cellule d'en-tête correspond à un magasin
-  // Reconnait: "ROB", "TOL", "PDP" exacts
-  //            "Magasin 01/03/98"
-  //            "Commande ROB", "Cmd ROB", "ROB Commande", etc.
-  const detectStore = (cellNorm) => {
+  // Helper : détecte si une cellule est un magasin et retourne sa définition
+  // - "ROB", "TOL", "PDP" exacts → reconnu
+  // - "Magasin 01/03/98" → reconnu via mapping G5_STORE_MAP
+  // - "Magasin XX" non mappé → inconnu (needsNaming)
+  // - "Commande ROB" / "ROB Commande" → reconnu
+  // - Autre nom → null
+  const detectStoreColumn = (cellRaw, cellNorm) => {
     if (!cellNorm) return null;
-    // Match exact
-    if (cellNorm === "rob") return "rob";
-    if (cellNorm === "tol") return "tol";
-    if (cellNorm === "pdp") return "pdp";
-    // Magasin XX
+
+    // Match exact des sigles connus
+    if (cellNorm === "rob") return { code: "ROB", label: "ROB", needsNaming: false };
+    if (cellNorm === "tol") return { code: "TOL", label: "TOL", needsNaming: false };
+    if (cellNorm === "pdp") return { code: "PDP", label: "PDP", needsNaming: false };
+
+    // Format G5 : Magasin XX
     if (cellNorm.startsWith("magasin")) {
       const code = cellNorm.replace("magasin", "").trim();
-      if (G5_STORE_MAP[code]) return G5_STORE_MAP[code];
-      return null;
+      const mapped = G5_STORE_MAP[code];
+      if (mapped) {
+        return { code: mapped.toUpperCase(), label: mapped.toUpperCase(), needsNaming: false };
+      }
+      // Magasin XX inconnu → demander un nom
+      return {
+        code: `MAGASIN_${code}`,
+        label: `Magasin ${code}`,
+        needsNaming: true,
+        originalHeader: cellRaw
+      };
     }
-    // Mot ROB/TOL/PDP isolé dans un libellé "Commande ROB", "Cmd TOL", "Cde PDP", etc.
-    // On split par espaces, tirets, parenthèses
+
+    // Mot ROB/TOL/PDP isolé dans "Commande ROB", "Cmd PDP", etc.
     const tokens = cellNorm.split(/[\s\-_()\/]+/).filter(Boolean);
-    if (tokens.includes("rob")) return "rob";
-    if (tokens.includes("tol")) return "tol";
-    if (tokens.includes("pdp")) return "pdp";
+    if (tokens.includes("rob")) return { code: "ROB", label: "ROB", needsNaming: false };
+    if (tokens.includes("tol")) return { code: "TOL", label: "TOL", needsNaming: false };
+    if (tokens.includes("pdp")) return { code: "PDP", label: "PDP", needsNaming: false };
+
     return null;
   };
 
-  // Cherche la ligne d'en-têtes
-  // Plusieurs stratégies pour trouver la ligne d'en-tête :
-  // 1. Une ligne contenant désignation/produit/libellé/nom
-  // 2. Si pas trouvé, une ligne contenant un mot-clé quantité (commande, cde, qte, etc.)
+  // Cherche la ligne d'en-têtes (plusieurs stratégies)
   let headerIdx = -1;
   let headers = null;
-
-  // Stratégie 1 : recherche d'en-tête classique
   for (let i = 0; i < Math.min(rows.length, 20); i++) {
     const row = rows[i].map(c => normCol(c));
     const hasDesig = row.some(c =>
@@ -522,19 +536,14 @@ function parseExcelFile(workbook) {
       break;
     }
   }
-
-  // Stratégie 2 : si rien trouvé, cherche une ligne avec mots-clés quantité
-  // C'est souvent la ligne d'en-tête même si la colonne produit a un nom inhabituel
   if (headerIdx === -1) {
     for (let i = 0; i < Math.min(rows.length, 20); i++) {
       const row = rows[i].map(c => normCol(c));
       const hasQty = row.some(c =>
         c === "quantite" || c === "qte" || c === "qty" ||
         c === "uvc" || c === "cde en uvc" || c === "cde" ||
-        c.includes("commande") || detectStore(c) !== null
+        c.includes("commande") || detectStoreColumn(null, c) !== null
       );
-      // En plus, la ligne doit avoir au moins une colonne non vide qui ressemble à un en-tête
-      // (texte court < 50 chars, pas que des chiffres)
       const hasTextHeader = row.some(c => c.length > 0 && c.length < 50 && !/^\d+([.,]\d+)?$/.test(c));
       if (hasQty && hasTextHeader) {
         headerIdx = i;
@@ -543,159 +552,147 @@ function parseExcelFile(workbook) {
       }
     }
   }
-
   if (headerIdx === -1) {
     throw new Error("Impossible de trouver une ligne d'en-têtes dans le fichier (cherché : produit/désignation/article/quantité/commande).");
   }
 
-  // Détection de colonne "quantité" générique pour les BDC sans magasin
-  // Cherche une colonne nommée "quantité", "qte", "qty", "uvc" (unité commande)
-  const detectQuantity = (cellNorm) => {
-    if (!cellNorm) return false;
-    if (cellNorm === "quantite" || cellNorm === "qte" || cellNorm === "qty") return true;
-    if (cellNorm === "commande" || cellNorm === "commande en uvc") return true;
-    // Colonnes type "Commande" sans magasin spécifique
-    return false;
-  };
-
-  // Map des colonnes
+  // Map des colonnes : article, désignation, cmd, recue + storeColumns (dynamique)
   const colMap = {};
   let isG5Format = false;
-  let quantityColIdx = -1; // Colonne quantité générique (fallback si pas de magasins)
-
-  // Première passe : on classe les colonnes en évitant les ambiguïtés
-  // ("Article" peut être un code ou la désignation selon le fichier)
   const articleAsCode = [];
-  const designationCandidates = [];
+  const storeColumns = []; // [{ idx, def: {code, label, needsNaming, ...} }]
 
   headers.forEach((h, idx) => {
     const n = normCol(h);
     if (!n) return;
 
-    // Désignation prioritaire (mots qui signifient clairement nom produit)
+    // Désignation prioritaire
     if (n.includes("designation") || n === "produit" || n === "libelle" || n === "libellé" ||
         n === "nom" || n === "description") {
       if (colMap.designation === undefined) colMap.designation = idx;
     }
-    // "Article" : on garde en candidat (code OU désignation, on tranche après)
+    // "Article" ambigu
     else if (n === "article") {
       articleAsCode.push(idx);
     }
-    // Code/ref article
+    // Code article
     else if (n === "code article" || n === "code" || n === "ref" ||
              n === "reference" || n === "référence") {
       if (colMap.article === undefined) colMap.article = idx;
     }
-    // Commande (sans nom de magasin)
-    else if (detectStore(n) === null && (n.includes("cmd") || n === "commande" ||
-             (n.includes("commande") && !detectStore(n)))) {
+    // Commande globale (sans nom de magasin)
+    else if (detectStoreColumn(null, n) === null && (n.includes("cmd") || n === "commande" ||
+             (n.includes("commande") && !detectStoreColumn(null, n)))) {
       if (colMap.cmd === undefined) colMap.cmd = idx;
     }
     // Réception
     else if (n.includes("recept") || n.includes("recu") || n === "reçu") {
       if (colMap.recue === undefined) colMap.recue = idx;
     }
-    // Magasins
+    // Magasin (connu ou inconnu)
     else {
-      const store = detectStore(n);
-      if (store) {
-        colMap[store] = idx;
+      const def = detectStoreColumn(h, n);
+      if (def) {
+        storeColumns.push({ idx, def });
         if (n.startsWith("magasin")) isG5Format = true;
       }
     }
   });
 
-  // Si on n'a pas de désignation mais on a une colonne "Article",
-  // analyse le contenu pour décider si c'est un code (chiffres) ou un nom
+  // Article ambigu : code (chiffres) ou désignation (texte) ?
   if (colMap.designation === undefined && articleAsCode.length > 0) {
     const articleIdx = articleAsCode[0];
-    // Regarde les 5 premières lignes de données pour ce champ
-    let textCount = 0;
-    let numericCount = 0;
+    let textCount = 0, numericCount = 0;
     for (let i = headerIdx + 1; i < Math.min(headerIdx + 6, rows.length); i++) {
       const v = (rows[i] && rows[i][articleIdx]) ? String(rows[i][articleIdx]).trim() : "";
       if (!v) continue;
-      // Si c'est principalement des chiffres (>= 8 chiffres) = code article
       if (/^\d{6,}$/.test(v)) numericCount++;
-      // Si c'est du texte de plus de 5 caractères = désignation
       else if (v.length > 5 && /[a-zA-Z]/.test(v)) textCount++;
     }
     if (textCount > numericCount) {
       colMap.designation = articleIdx;
-    } else {
-      if (colMap.article === undefined) colMap.article = articleIdx;
+    } else if (colMap.article === undefined) {
+      colMap.article = articleIdx;
     }
   }
 
-  // Si TOUJOURS pas de désignation, on cherche la colonne avec le contenu textuel le plus long
-  // (c'est presque sûrement la désignation produit)
+  // Fallback désignation : colonne avec le plus de texte long
   if (colMap.designation === undefined) {
-    const usedCols = new Set([colMap.article, colMap.cmd, colMap.recue,
-                              colMap.rob, colMap.tol, colMap.pdp].filter(x => x !== undefined));
-    let bestIdx = -1;
-    let bestAvgLen = 0;
+    const usedCols = new Set([
+      colMap.article, colMap.cmd, colMap.recue,
+      ...storeColumns.map(s => s.idx)
+    ].filter(x => x !== undefined));
+    let bestIdx = -1, bestAvgLen = 0;
     for (let c = 0; c < headers.length; c++) {
       if (usedCols.has(c)) continue;
-      // Calcule longueur moyenne du contenu texte (non vide, non purement numérique)
-      let totalLen = 0;
-      let count = 0;
+      let totalLen = 0, count = 0;
       for (let i = headerIdx + 1; i < Math.min(headerIdx + 11, rows.length); i++) {
         const v = (rows[i] && rows[i][c]) ? String(rows[i][c]).trim() : "";
         if (!v) continue;
-        if (/^[\d\s.,]+$/.test(v)) continue; // ignore valeurs purement numériques
+        if (/^[\d\s.,]+$/.test(v)) continue;
         totalLen += v.length;
         count++;
       }
       const avg = count > 0 ? totalLen / count : 0;
-      if (avg > bestAvgLen && avg > 8) { // au moins 8 caractères en moyenne
+      if (avg > bestAvgLen && avg > 8) {
         bestAvgLen = avg;
         bestIdx = c;
       }
     }
-    if (bestIdx !== -1) {
-      colMap.designation = bestIdx;
-    }
+    if (bestIdx !== -1) colMap.designation = bestIdx;
   }
 
-  // Si pas de magasins détectés → on cherche une colonne "quantité" générique
-  const hasAnyStore = colMap.rob !== undefined || colMap.tol !== undefined || colMap.pdp !== undefined;
-  if (!hasAnyStore) {
+  // Si aucun magasin trouvé → cherche colonne quantité générique
+  // L'admin devra nommer cette colonne (needsNaming = true)
+  if (storeColumns.length === 0) {
+    let quantityColIdx = -1;
     headers.forEach((h, idx) => {
       const n = normCol(h);
       if (!n) return;
       if (idx === colMap.article || idx === colMap.designation ||
           idx === colMap.cmd || idx === colMap.recue) return;
-      // Cherche colonne quantité/qte/uvc/commande/cde
       if (quantityColIdx === -1 && (
         n === "quantite" || n === "qte" || n === "qty" ||
         n === "commande en uvc" || n === "uvc" || n === "uc" ||
         n === "cde en uvc" || n === "cde" ||
         n.includes("cde en uvc") || n.includes("commande en uvc") ||
         (n.includes("quantite") && !n.includes("recept")) ||
-        (n.includes("commande") && !detectStore(n)) ||
-        (n.startsWith("cde") && !detectStore(n))
+        (n.includes("commande") && !detectStoreColumn(null, n)) ||
+        (n.startsWith("cde") && !detectStoreColumn(null, n))
       )) {
         quantityColIdx = idx;
       }
     });
-    // Si on trouve une quantité, on l'utilise pour PDP
     if (quantityColIdx !== -1) {
-      colMap.pdp = quantityColIdx;
-    }
-    // Sinon, si on a une colonne "commande" (cmd détecté plus haut), on l'utilise pour PDP
-    else if (colMap.cmd !== undefined) {
-      colMap.pdp = colMap.cmd;
+      storeColumns.push({
+        idx: quantityColIdx,
+        def: {
+          code: `COL_${quantityColIdx}`,
+          label: String(headers[quantityColIdx] || "Colonne quantité").trim(),
+          needsNaming: true,
+          originalHeader: headers[quantityColIdx]
+        }
+      });
+    } else if (colMap.cmd !== undefined) {
+      // Fallback : on prend la colonne CMD
+      storeColumns.push({
+        idx: colMap.cmd,
+        def: {
+          code: `COL_${colMap.cmd}`,
+          label: String(headers[colMap.cmd] || "Commande").trim(),
+          needsNaming: true,
+          originalHeader: headers[colMap.cmd]
+        }
+      });
+      colMap.cmd = undefined;
     }
   }
 
-  // Si on n'a pas trouvé de désignation, c'est qu'il y a un problème
   if (colMap.designation === undefined) {
     throw new Error("Impossible de trouver une colonne désignation/produit dans le fichier.");
   }
-
-  // Vérifie qu'on a au moins UNE source de quantité (un magasin OU une quantité)
-  if (colMap.rob === undefined && colMap.tol === undefined && colMap.pdp === undefined) {
-    throw new Error("Aucune colonne de quantité trouvée. Ajoute une colonne 'Quantité', 'CDE en UVC', 'ROB', 'TOL' ou 'PDP'.");
+  if (storeColumns.length === 0) {
+    throw new Error("Aucune colonne de quantité/magasin trouvée dans le fichier.");
   }
 
   // Parse les lignes produit
@@ -707,42 +704,41 @@ function parseExcelFile(workbook) {
     const designation = (row[colMap.designation] || "").toString().trim();
     if (!designation) continue;
 
-    // Ignore les lignes de totaux (montant ht, montant ttc, tva, etc.)
+    // Ignore lignes totaux
     const desigLower = stripAccents(designation.toLowerCase());
-    if (desigLower.includes("montant ht") ||
-        desigLower.includes("montant ttc") ||
-        desigLower.includes("montant tva") ||
-        desigLower === "total" ||
-        desigLower === "totaux") {
+    if (desigLower.includes("montant ht") || desigLower.includes("montant ttc") ||
+        desigLower.includes("montant tva") || desigLower === "total" || desigLower === "totaux") {
       continue;
     }
 
-    // Parser adapté au format
     const parse = isG5Format ? parseG5Cell : (v) => {
       if (v === "" || v === null || v === undefined) return 0;
       const s = v.toString().trim();
       const m = s.match(/^(\d+)\s*u/);
       if (m) return parseInt(m[1], 10);
-      // Gère aussi les nombres avec virgule décimale française "1,5"
       const cleaned = s.replace(",", ".");
       const n = parseFloat(cleaned);
       return isNaN(n) ? 0 : Math.round(n);
     };
 
-    const rob = colMap.rob !== undefined ? parse(row[colMap.rob]) : 0;
-    const tol = colMap.tol !== undefined ? parse(row[colMap.tol]) : 0;
-    const pdp = colMap.pdp !== undefined ? parse(row[colMap.pdp]) : 0;
+    // Construit le map des quantités par magasin
+    const stores = {};
+    let total = 0;
+    for (const sc of storeColumns) {
+      const q = parse(row[sc.idx]);
+      stores[sc.def.code] = q;
+      total += q;
+    }
 
-    // Si la quantité reçue n'est pas dans le fichier (cas BDC),
-    // on la déduit de la somme des magasins
+    if (total === 0) continue; // ligne sans quantité
+
     let recue;
     if (colMap.recue !== undefined) {
       recue = parse(row[colMap.recue]);
     } else {
-      recue = rob + tol + pdp;
+      recue = total;
     }
 
-    // Si la commande n'est pas dans le fichier, on prend la reçue par défaut
     let cmd;
     if (colMap.cmd !== undefined) {
       cmd = parse(row[colMap.cmd]);
@@ -750,22 +746,19 @@ function parseExcelFile(workbook) {
       cmd = recue;
     }
 
-    // On n'ajoute pas les lignes où tous les magasins sont à 0 (lignes vides ou non commandées)
-    if (rob === 0 && tol === 0 && pdp === 0 && recue === 0) continue;
-
     products.push({
       article: colMap.article !== undefined ? (row[colMap.article] || "").toString().trim() : "",
       designation,
       cmd,
       recue,
-      rob,
-      tol,
-      pdp
+      stores // map { CODE: quantité }
     });
   }
 
-  return products;
+  // Retourne aussi les définitions de magasins (pour l'écran de nommage si besoin)
+  return { products, storeColumns: storeColumns.map(s => s.def) };
 }
+
 
 /* =========================================================================
    FIREBASE / STATE SYNC
@@ -904,7 +897,7 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, onLogout }) {
+function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, onLogout, onNeedsNaming }) {
   const [error, setError] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [pendingFile, setPendingFile] = useState(null);
@@ -987,16 +980,23 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "BDC");
 
-      const products = parseExcelFile(wb);
+      const { products, storeColumns } = parseExcelFile(wb);
       if (products.length === 0) {
         throw new Error("Aucun produit reconnu dans ce BDC (vérifie les en-têtes de colonnes).");
       }
 
       const supplier = bdcSupplier.trim();
+      const needsNaming = storeColumns.some(s => s.needsNaming);
+      if (needsNaming) {
+        setShowBdcModal(false);
+        setBdcSupplier("");
+        onNeedsNaming({ supplier, products, storeColumns });
+        return;
+      }
       const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
       setShowBdcModal(false);
       setBdcSupplier("");
-      onSessionStart(sessionId, supplier, products);
+      onSessionStart(sessionId, supplier, products, storeColumns);
     } catch (e) {
       setBdcError(e.message);
     } finally {
@@ -1020,13 +1020,19 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
     try {
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, { type: "array" });
-      const products = parseExcelFile(wb);
+      const { products, storeColumns } = parseExcelFile(wb);
       if (products.length === 0) {
         setError("Aucun produit trouvé dans le fichier.");
         return;
       }
+      // Si des magasins ont besoin d'être nommés, on passe par l'écran de nommage
+      const needsNaming = storeColumns.some(s => s.needsNaming);
+      if (needsNaming) {
+        onNeedsNaming({ supplier, products, storeColumns });
+        return;
+      }
       const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
-      onSessionStart(sessionId, supplier, products);
+      onSessionStart(sessionId, supplier, products, storeColumns);
     } catch (e) {
       setError(`Erreur de lecture: ${e.message}`);
     }
@@ -1236,7 +1242,7 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
   );
 }
 
-function ProductCard({ product, pkey, status, operator, onLock, onUnlock, onValidate, onUndo, onEdit }) {
+function ProductCard({ product, pkey, status, operator, storeColumns, onLock, onUnlock, onValidate, onUndo, onEdit }) {
   const isLocked = status.lockedBy && status.lockedBy !== operator;
   const lockExpired = status.lockedAt && (Date.now() - status.lockedAt) > LOCK_DURATION_MS;
   const reallyLocked = isLocked && !lockExpired;
@@ -1244,14 +1250,28 @@ function ProductCard({ product, pkey, status, operator, onLock, onUnlock, onVali
   const isMine = status.lockedBy === operator && !lockExpired;
 
   // Quantités effectives (peuvent avoir été modifiées via le modal)
-  const qtyRob = status.qtyRob !== undefined ? status.qtyRob : product.rob;
-  const qtyTol = status.qtyTol !== undefined ? status.qtyTol : product.tol;
-  const qtyPdp = status.qtyPdp !== undefined ? status.qtyPdp : product.pdp;
+  // status.qtyStores = { CODE: qty, ... }  ou ancien format status.qtyRob/Tol/Pdp
+  const getQty = (code) => {
+    if (status.qtyStores && status.qtyStores[code] !== undefined) {
+      return status.qtyStores[code];
+    }
+    // Compat ancienne version (rob/tol/pdp dans status)
+    if (code === "ROB" && status.qtyRob !== undefined) return status.qtyRob;
+    if (code === "TOL" && status.qtyTol !== undefined) return status.qtyTol;
+    if (code === "PDP" && status.qtyPdp !== undefined) return status.qtyPdp;
+    // Fallback : la valeur initiale du produit
+    return (product.stores && product.stores[code]) || 0;
+  };
   const recue = status.qtyRecue !== undefined ? status.qtyRecue : product.recue;
+
+  // Construit le map de quantités effectives pour la validation
+  const effectiveQtyStores = {};
+  storeColumns.forEach(s => {
+    effectiveQtyStores[s.code] = getQty(s.code);
+  });
 
   const cls = `product-card ${isDone ? "done" : ""} ${reallyLocked ? "locked" : ""} ${isMine ? "mine" : ""}`;
 
-  // Cliquer sur le nom = "je m'en occupe" / "je le libère"
   const handleClaim = () => {
     if (isDone || reallyLocked) return;
     if (isMine) {
@@ -1260,6 +1280,10 @@ function ProductCard({ product, pkey, status, operator, onLock, onUnlock, onVali
       onLock(pkey);
     }
   };
+
+  // Grille adaptative : 3 cols si <=3 magasins, 2 cols sinon
+  const nbStores = storeColumns.length;
+  const gridCols = nbStores <= 3 ? `repeat(${nbStores}, 1fr)` : "repeat(2, 1fr)";
 
   return (
     <div className={cls}>
@@ -1305,26 +1329,23 @@ function ProductCard({ product, pkey, status, operator, onLock, onUnlock, onVali
         )}
       </div>
 
-      <div className="dest-row">
-        <div className="dest-cell">
-          <div className="name">ROB</div>
-          <div className={`qty ${qtyRob === 0 ? "zero" : ""}`}>{qtyRob}</div>
-        </div>
-        <div className="dest-cell">
-          <div className="name">TOL</div>
-          <div className={`qty ${qtyTol === 0 ? "zero" : ""}`}>{qtyTol}</div>
-        </div>
-        <div className="dest-cell">
-          <div className="name">PDP</div>
-          <div className={`qty ${qtyPdp === 0 ? "zero" : ""}`}>{qtyPdp}</div>
-        </div>
+      <div className="dest-row" style={{gridTemplateColumns: gridCols}}>
+        {storeColumns.map(s => {
+          const q = effectiveQtyStores[s.code];
+          return (
+            <div className="dest-cell" key={s.code}>
+              <div className="name">{s.label}</div>
+              <div className={`qty ${q === 0 ? "zero" : ""}`}>{q}</div>
+            </div>
+          );
+        })}
       </div>
 
       {!isDone && !reallyLocked && (
         <div className="actions-row">
           <button
             className="btn-validate"
-            onClick={() => onValidate(pkey, { qtyRob, qtyTol, qtyPdp, qtyRecue: recue })}
+            onClick={() => onValidate(pkey, { qtyStores: effectiveQtyStores, qtyRecue: recue })}
           >
             ✓ Dispatché
           </button>
@@ -1351,43 +1372,58 @@ function ProductCard({ product, pkey, status, operator, onLock, onUnlock, onVali
   );
 }
 
-function EditModal({ product, status, onSave, onClose, allowReceivedEdit }) {
-  // Important: on stocke en string pour gérer le champ vide pendant la saisie
-  const [rob, setRob] = useState(String(status.qtyRob !== undefined ? status.qtyRob : product.rob));
-  const [tol, setTol] = useState(String(status.qtyTol !== undefined ? status.qtyTol : product.tol));
-  const [pdp, setPdp] = useState(String(status.qtyPdp !== undefined ? status.qtyPdp : product.pdp));
+function EditModal({ product, status, storeColumns, onSave, onClose, allowReceivedEdit }) {
+  // Quantités par magasin en string pour gérer la saisie
+  const getInitial = (code) => {
+    if (status.qtyStores && status.qtyStores[code] !== undefined) return String(status.qtyStores[code]);
+    if (code === "ROB" && status.qtyRob !== undefined) return String(status.qtyRob);
+    if (code === "TOL" && status.qtyTol !== undefined) return String(status.qtyTol);
+    if (code === "PDP" && status.qtyPdp !== undefined) return String(status.qtyPdp);
+    return String((product.stores && product.stores[code]) || 0);
+  };
+
+  const [qties, setQties] = useState(() => {
+    const init = {};
+    storeColumns.forEach(s => { init[s.code] = getInitial(s.code); });
+    return init;
+  });
   const [recue, setRecue] = useState(String(status.qtyRecue !== undefined ? status.qtyRecue : product.recue));
 
-  // Convertit string -> nombre (vide = 0)
   const toNum = (s) => {
     if (s === "" || s === null || s === undefined) return 0;
     const n = parseInt(s, 10);
     return isNaN(n) ? 0 : n;
   };
 
-  const robN = toNum(rob);
-  const tolN = toNum(tol);
-  const pdpN = toNum(pdp);
-  const recueN = toNum(recue);
-  const total = robN + tolN + pdpN;
-  const gap = total - recueN;
-
-  const handleNumChange = (setter) => (e) => {
+  const handleNumChange = (code) => (e) => {
     const v = e.target.value;
-    // Autorise vide, et nombres positifs uniquement
     if (v === "" || /^\d+$/.test(v)) {
-      setter(v);
+      setQties(prev => ({ ...prev, [code]: v }));
     }
   };
 
-  const handleSave = () => {
-    onSave({
-      qtyRob: robN,
-      qtyTol: tolN,
-      qtyPdp: pdpN,
-      qtyRecue: recueN
-    });
+  const handleRecueChange = (e) => {
+    const v = e.target.value;
+    if (v === "" || /^\d+$/.test(v)) setRecue(v);
   };
+
+  const recueN = toNum(recue);
+  let total = 0;
+  const numQties = {};
+  storeColumns.forEach(s => {
+    const n = toNum(qties[s.code]);
+    numQties[s.code] = n;
+    total += n;
+  });
+  const gap = total - recueN;
+
+  const handleSave = () => {
+    onSave({ qtyStores: numQties, qtyRecue: recueN });
+  };
+
+  // Adapte la grille selon nombre de magasins
+  const nbStores = storeColumns.length;
+  const gridCols = nbStores <= 3 ? `repeat(${nbStores}, 1fr)` : "repeat(2, 1fr)";
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -1396,71 +1432,49 @@ function EditModal({ product, status, onSave, onClose, allowReceivedEdit }) {
         <div className="designation-modal">{product.designation}</div>
 
         {allowReceivedEdit && (
-          <>
-            <div style={{
-              background: "#fff3e0", padding: 10, borderRadius: 8,
-              marginBottom: 12, border: "1px solid #ffcc80"
-            }}>
-              <div style={{fontSize: 11, fontWeight: 700, color: "#e65100", marginBottom: 4}}>
-                QUANTITÉ REÇUE (BL)
-              </div>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={recue}
-                onChange={handleNumChange(setRecue)}
-                onFocus={(e) => e.target.select()}
-                style={{
-                  width: "100%", padding: 10, fontSize: 22, fontWeight: 700,
-                  textAlign: "center", border: "1.5px solid #ff9800",
-                  borderRadius: 6, background: "#fff"
-                }}
-              />
-              <div style={{fontSize: 10, color: "#666", marginTop: 4, textAlign: "center"}}>
-                Initial: {product.recue}
-              </div>
+          <div style={{
+            background: "#fff3e0", padding: 10, borderRadius: 8,
+            marginBottom: 12, border: "1px solid #ffcc80"
+          }}>
+            <div style={{fontSize: 11, fontWeight: 700, color: "#e65100", marginBottom: 4}}>
+              QUANTITÉ REÇUE (BL)
             </div>
-          </>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={recue}
+              onChange={handleRecueChange}
+              onFocus={(e) => e.target.select()}
+              style={{
+                width: "100%", padding: 10, fontSize: 22, fontWeight: 700,
+                textAlign: "center", border: "1.5px solid #ff9800",
+                borderRadius: 6, background: "#fff"
+              }}
+            />
+            <div style={{fontSize: 10, color: "#666", marginTop: 4, textAlign: "center"}}>
+              Initial: {product.recue}
+            </div>
+          </div>
         )}
 
         <div style={{fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 6}}>
           RÉPARTITION PAR MAGASIN
         </div>
-        <div className="edit-grid">
-          <div className="edit-cell">
-            <label>ROB</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={rob}
-              onChange={handleNumChange(setRob)}
-              onFocus={(e) => e.target.select()}
-            />
-          </div>
-          <div className="edit-cell">
-            <label>TOL</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={tol}
-              onChange={handleNumChange(setTol)}
-              onFocus={(e) => e.target.select()}
-            />
-          </div>
-          <div className="edit-cell">
-            <label>PDP</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={pdp}
-              onChange={handleNumChange(setPdp)}
-              onFocus={(e) => e.target.select()}
-            />
-          </div>
+        <div className="edit-grid" style={{gridTemplateColumns: gridCols}}>
+          {storeColumns.map(s => (
+            <div className="edit-cell" key={s.code}>
+              <label>{s.label}</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={qties[s.code]}
+                onChange={handleNumChange(s.code)}
+                onFocus={(e) => e.target.select()}
+              />
+            </div>
+          ))}
         </div>
 
         <div style={{
@@ -1490,7 +1504,7 @@ function EditModal({ product, status, onSave, onClose, allowReceivedEdit }) {
   );
 }
 
-function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onLeave }) {
+function DispatchScreen({ sessionId, operator, supplier, products, storeColumns, onFinish, onLeave }) {
   const { state, meta, connected, lockRow, unlockRow, validateRow, undoRow } = useFirebaseSession(sessionId, operator);
   const [search, setSearch] = useState("");
   const [editingKey, setEditingKey] = useState(null);
@@ -1698,6 +1712,7 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onL
                   pkey={p._pkey}
                   status={state[p._pkey] || {}}
                   operator={operator}
+                  storeColumns={storeColumns}
                   onLock={lockRow}
                   onUnlock={unlockRow}
                   onValidate={handleValidateScan}
@@ -1743,6 +1758,7 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onL
                 pkey={p._pkey}
                 status={state[p._pkey] || {}}
                 operator={operator}
+                storeColumns={storeColumns}
                 onLock={lockRow}
                 onUnlock={unlockRow}
                 onValidate={handleValidate}
@@ -1772,6 +1788,7 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onL
         <EditModal
           product={editingProduct}
           status={state[editingKey] || {}}
+          storeColumns={storeColumns}
           allowReceivedEdit={editAllowReceived}
           onSave={handleEditSave}
           onClose={handleEditCancel}
@@ -1783,7 +1800,7 @@ function DispatchScreen({ sessionId, operator, supplier, products, onFinish, onL
   );
 }
 
-function RecapScreen({ sessionId, operator, supplier, products, state, onClose, onLeave }) {
+function RecapScreen({ sessionId, operator, supplier, products, storeColumns, state, onClose, onLeave }) {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -1812,20 +1829,35 @@ function RecapScreen({ sessionId, operator, supplier, products, state, onClose, 
       }
     });
 
+    // Helpers pour accéder aux qty effectives par store
+    const getEffectiveQty = (state, p, code) => {
+      const s = state[p._pkey];
+      if (!s) return (p.stores && p.stores[code]) || 0;
+      if (s.qtyStores && s.qtyStores[code] !== undefined) return s.qtyStores[code];
+      // Compat ancienne version
+      if (code === "ROB" && s.qtyRob !== undefined) return s.qtyRob;
+      if (code === "TOL" && s.qtyTol !== undefined) return s.qtyTol;
+      if (code === "PDP" && s.qtyPdp !== undefined) return s.qtyPdp;
+      return (p.stores && p.stores[code]) || 0;
+    };
+
     // Ajustements (quantités modifiées)
     const adjusted = products.filter(p => {
       const s = state[p._pkey];
       if (!s?.done) return false;
-      return (
-        (s.qtyRob !== undefined && s.qtyRob !== p.rob) ||
-        (s.qtyTol !== undefined && s.qtyTol !== p.tol) ||
-        (s.qtyPdp !== undefined && s.qtyPdp !== p.pdp) ||
-        (s.qtyRecue !== undefined && s.qtyRecue !== p.recue)
-      );
+      // Quantité reçue modifiée ?
+      if (s.qtyRecue !== undefined && s.qtyRecue !== p.recue) return true;
+      // Au moins un magasin modifié ?
+      for (const sc of storeColumns) {
+        const initial = (p.stores && p.stores[sc.code]) || 0;
+        const effective = getEffectiveQty(state, p, sc.code);
+        if (effective !== initial) return true;
+      }
+      return false;
     });
 
-    return { total, done, notDone, startedAt, endedAt, duration, byOp, adjusted };
-  }, [products, state]);
+    return { total, done, notDone, startedAt, endedAt, duration, byOp, adjusted, getEffectiveQty };
+  }, [products, state, storeColumns]);
 
   const sendRecap = async () => {
     setSending(true);
@@ -1843,19 +1875,33 @@ function RecapScreen({ sessionId, operator, supplier, products, state, onClose, 
       done: analysis.done,
       notDone: analysis.notDone.length,
       byOperator: analysis.byOp,
+      storeColumns: storeColumns, // expose la liste des sites dynamiques
       lines: products.map(p => {
         const s = state[p._pkey] || {};
+        // Construit les maps stores prévu/réel
+        const stores_prevu = {};
+        const stores_reel = {};
+        for (const sc of storeColumns) {
+          stores_prevu[sc.code] = (p.stores && p.stores[sc.code]) || 0;
+          stores_reel[sc.code] = analysis.getEffectiveQty(state, p, sc.code);
+        }
+        // Compat ancienne version : on remplit aussi rob/tol/pdp si présents
+        const robPrevu = stores_prevu["ROB"] || 0;
+        const tolPrevu = stores_prevu["TOL"] || 0;
+        const pdpPrevu = stores_prevu["PDP"] || 0;
+        const robReel = stores_reel["ROB"] || 0;
+        const tolReel = stores_reel["TOL"] || 0;
+        const pdpReel = stores_reel["PDP"] || 0;
         return {
           article: p.article,
           designation: p.designation,
           recue_initiale: p.recue,
           recue: s.qtyRecue !== undefined ? s.qtyRecue : p.recue,
-          rob_prevu: p.rob,
-          tol_prevu: p.tol,
-          pdp_prevu: p.pdp,
-          rob_reel: s.qtyRob !== undefined ? s.qtyRob : p.rob,
-          tol_reel: s.qtyTol !== undefined ? s.qtyTol : p.tol,
-          pdp_reel: s.qtyPdp !== undefined ? s.qtyPdp : p.pdp,
+          // Compat
+          rob_prevu: robPrevu, tol_prevu: tolPrevu, pdp_prevu: pdpPrevu,
+          rob_reel: robReel, tol_reel: tolReel, pdp_reel: pdpReel,
+          // Nouveau : map complet
+          stores_prevu, stores_reel,
           done: !!s.done,
           doneBy: s.doneBy || "",
           doneAt: s.doneAt ? new Date(s.doneAt).toISOString() : ""
@@ -1957,7 +2003,12 @@ function RecapScreen({ sessionId, operator, supplier, products, state, onClose, 
               <div className="anomaly-item" key={p._pkey}>
                 <div className="product">{p.designation}</div>
                 <div className="detail">
-                  Reçu: {p.recue} • ROB {p.rob} / TOL {p.tol} / PDP {p.pdp}
+                  Reçu: {p.recue} •{" "}
+                  {storeColumns.map((sc, i) => (
+                    <span key={sc.code}>
+                      {i > 0 ? " / " : ""}{sc.label} {(p.stores && p.stores[sc.code]) || 0}
+                    </span>
+                  ))}
                 </div>
               </div>
             ))}
@@ -1969,12 +2020,14 @@ function RecapScreen({ sessionId, operator, supplier, products, state, onClose, 
             <h3>✎ Quantités ajustées ({analysis.adjusted.length})</h3>
             {analysis.adjusted.map(p => {
               const s = state[p._pkey];
+              const prevu = storeColumns.map(sc => `${sc.label} ${(p.stores && p.stores[sc.code]) || 0}`).join(" / ");
+              const reel = storeColumns.map(sc => `${sc.label} ${analysis.getEffectiveQty(state, p, sc.code)}`).join(" / ");
               return (
                 <div className="anomaly-item" key={p._pkey}>
                   <div className="product">{p.designation}</div>
                   <div className="detail">
-                    Prévu: {p.rob}/{p.tol}/{p.pdp} →
-                    Réel: {s.qtyRob ?? p.rob}/{s.qtyTol ?? p.tol}/{s.qtyPdp ?? p.pdp}
+                    Prévu: {prevu}<br/>
+                    Réel: {reel}
                   </div>
                 </div>
               );
@@ -2008,57 +2061,49 @@ function RecapScreen({ sessionId, operator, supplier, products, state, onClose, 
         <div className="recap-card">
           <h3>📄 Bons de Livraison PDF</h3>
           <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
-            Génère un BL par magasin à imprimer ou envoyer.
+            Génère un BL par site/magasin à imprimer ou envoyer.
           </p>
-          <button
-            className="btn-primary"
-            onClick={() => {
-              const sessionLike = {
-                id: sessionId,
-                supplier,
-                startedAt: analysis.startedAt,
-                createdBy: operator,
-                operators: Object.keys(analysis.byOp || {}),
-                state
-              };
-              generateAllBLs(sessionLike, products);
-            }}
-            style={{marginBottom: 8}}
-          >
-            📥 Télécharger les 3 BL (ROB / TOL / PDP)
-          </button>
-          <div style={{display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6}}>
-            <button
-              className="btn-secondary"
-              onClick={() => generateBL({
-                id: sessionId, supplier,
-                startedAt: analysis.startedAt,
-                createdBy: operator,
-                operators: Object.keys(analysis.byOp || {}),
-                state
-              }, products, "rob")}
-            >ROB</button>
-            <button
-              className="btn-secondary"
-              onClick={() => generateBL({
-                id: sessionId, supplier,
-                startedAt: analysis.startedAt,
-                createdBy: operator,
-                operators: Object.keys(analysis.byOp || {}),
-                state
-              }, products, "tol")}
-            >TOL</button>
-            <button
-              className="btn-secondary"
-              onClick={() => generateBL({
-                id: sessionId, supplier,
-                startedAt: analysis.startedAt,
-                createdBy: operator,
-                operators: Object.keys(analysis.byOp || {}),
-                state
-              }, products, "pdp")}
-            >PDP</button>
-          </div>
+          {(() => {
+            const sessionLike = {
+              id: sessionId,
+              supplier,
+              startedAt: analysis.startedAt,
+              createdBy: operator,
+              operators: Object.keys(analysis.byOp || {}),
+              state
+            };
+            // Filtre les magasins actifs (avec au moins 1 unité)
+            const activeStores = storeColumns.filter(sc => {
+              let total = 0;
+              products.forEach(p => {
+                const q = analysis.getEffectiveQty(state, p, sc.code);
+                total += q;
+              });
+              return total > 0;
+            });
+            return (
+              <>
+                <button
+                  className="btn-primary"
+                  onClick={() => generateAllBLs(sessionLike, products, storeColumns)}
+                  style={{marginBottom: 8}}
+                >
+                  📥 Télécharger tous les BL ({activeStores.length})
+                </button>
+                <div style={{display: "grid", gridTemplateColumns: `repeat(${Math.min(activeStores.length, 3)}, 1fr)`, gap: 6}}>
+                  {activeStores.map(sc => (
+                    <button
+                      key={sc.code}
+                      className="btn-secondary"
+                      onClick={() => generateBL(sessionLike, products, sc.code, storeColumns)}
+                    >
+                      {sc.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         <div className="recap-card">
@@ -2158,7 +2203,8 @@ function AdminScreen({ operator, onClose, onViewSession }) {
           durationMs: firstDone && lastDone ? (lastDone - firstDone) : 0,
           operators: Array.from(ops),
           products,
-          state
+          state,
+          meta: s.meta // contient storeColumns pour AdminSessionDetail
         });
       });
       list.sort((a,b) => (b.startedAt || 0) - (a.startedAt || 0));
@@ -2475,17 +2521,56 @@ function AdminSessionDetail({ session, onClose }) {
   const dateStr = date ? date.toLocaleString("fr-FR") : "";
 
   const products = s.products || [];
+  // storeColumns vient de la session si stockée, sinon fallback ROB/TOL/PDP
+  const storeColumns = useMemo(() => {
+    if (s.meta && Array.isArray(s.meta.storeColumns) && s.meta.storeColumns.length > 0) {
+      return s.meta.storeColumns;
+    }
+    // Fallback : si une session ancienne n'a pas storeColumns mais a des produits avec rob/tol/pdp
+    return [
+      { code: "ROB", label: "ROB", needsNaming: false },
+      { code: "TOL", label: "TOL", needsNaming: false },
+      { code: "PDP", label: "PDP", needsNaming: false }
+    ];
+  }, [s.meta]);
+
   const productsWithKeys = useMemo(() => {
     return products.map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }));
   }, [products]);
 
+  // Helper pour qty effective d'un produit pour un magasin donné
+  const getEffectiveQty = (p, code) => {
+    const st = s.state[p._pkey];
+    if (st && st.qtyStores && st.qtyStores[code] !== undefined) return st.qtyStores[code];
+    // Compat ancien format
+    if (st && code === "ROB" && st.qtyRob !== undefined) return st.qtyRob;
+    if (st && code === "TOL" && st.qtyTol !== undefined) return st.qtyTol;
+    if (st && code === "PDP" && st.qtyPdp !== undefined) return st.qtyPdp;
+    // Valeurs prévues
+    if (p.stores && p.stores[code] !== undefined) return p.stores[code];
+    // Compat fichiers très anciens
+    if (code === "ROB" && p.rob !== undefined) return p.rob;
+    if (code === "TOL" && p.tol !== undefined) return p.tol;
+    if (code === "PDP" && p.pdp !== undefined) return p.pdp;
+    return 0;
+  };
+  const getPlanned = (p, code) => {
+    if (p.stores && p.stores[code] !== undefined) return p.stores[code];
+    if (code === "ROB" && p.rob !== undefined) return p.rob;
+    if (code === "TOL" && p.tol !== undefined) return p.tol;
+    if (code === "PDP" && p.pdp !== undefined) return p.pdp;
+    return 0;
+  };
+
   const doneProducts = productsWithKeys.filter(p => s.state[p._pkey]?.done);
   const notDoneProducts = productsWithKeys.filter(p => !s.state[p._pkey]?.done);
   const adjusted = doneProducts.filter(p => {
-    const st = s.state[p._pkey];
-    return (st.qtyRob !== undefined && st.qtyRob !== p.rob) ||
-           (st.qtyTol !== undefined && st.qtyTol !== p.tol) ||
-           (st.qtyPdp !== undefined && st.qtyPdp !== p.pdp);
+    for (const sc of storeColumns) {
+      const planned = getPlanned(p, sc.code);
+      const real = getEffectiveQty(p, sc.code);
+      if (planned !== real) return true;
+    }
+    return false;
   });
 
   const handleDelete = () => {
@@ -2556,7 +2641,14 @@ function AdminSessionDetail({ session, onClose }) {
             {notDoneProducts.map(p => (
               <div className="anomaly-item" key={p._pkey}>
                 <div className="product">{p.designation}</div>
-                <div className="detail">Reçu: {p.recue} • ROB {p.rob} / TOL {p.tol} / PDP {p.pdp}</div>
+                <div className="detail">
+                  Reçu: {p.recue} •{" "}
+                  {storeColumns.map((sc, i) => (
+                    <span key={sc.code}>
+                      {i > 0 ? " / " : ""}{sc.label} {getPlanned(p, sc.code)}
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -2566,13 +2658,14 @@ function AdminSessionDetail({ session, onClose }) {
           <div className="recap-card">
             <h3>✎ Quantités ajustées ({adjusted.length})</h3>
             {adjusted.map(p => {
-              const st = s.state[p._pkey];
+              const prevu = storeColumns.map(sc => `${sc.label} ${getPlanned(p, sc.code)}`).join(" / ");
+              const reel = storeColumns.map(sc => `${sc.label} ${getEffectiveQty(p, sc.code)}`).join(" / ");
               return (
                 <div className="anomaly-item" key={p._pkey}>
                   <div className="product">{p.designation}</div>
                   <div className="detail">
-                    Prévu: {p.rob}/{p.tol}/{p.pdp} →
-                    Réel: {st.qtyRob ?? p.rob}/{st.qtyTol ?? p.tol}/{st.qtyPdp ?? p.pdp}
+                    Prévu: {prevu}<br/>
+                    Réel: {reel}
                   </div>
                 </div>
               );
@@ -2582,18 +2675,35 @@ function AdminSessionDetail({ session, onClose }) {
 
         <div className="recap-card">
           <h3>📄 Générer les BL PDF</h3>
-          <button
-            className="btn-primary"
-            onClick={() => generateAllBLs(s, productsWithKeys)}
-            style={{marginBottom: 8}}
-          >
-            📥 Télécharger les 3 BL (ROB / TOL / PDP)
-          </button>
-          <div style={{display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6}}>
-            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "rob")}>ROB</button>
-            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "tol")}>TOL</button>
-            <button className="btn-secondary" onClick={() => generateBL(s, productsWithKeys, "pdp")}>PDP</button>
-          </div>
+          {(() => {
+            const activeStores = storeColumns.filter(sc => {
+              let total = 0;
+              productsWithKeys.forEach(p => { total += getEffectiveQty(p, sc.code); });
+              return total > 0;
+            });
+            return (
+              <>
+                <button
+                  className="btn-primary"
+                  onClick={() => generateAllBLs(s, productsWithKeys, storeColumns)}
+                  style={{marginBottom: 8}}
+                >
+                  📥 Télécharger tous les BL ({activeStores.length})
+                </button>
+                <div style={{display: "grid", gridTemplateColumns: `repeat(${Math.min(activeStores.length, 3)}, 1fr)`, gap: 6}}>
+                  {activeStores.map(sc => (
+                    <button
+                      key={sc.code}
+                      className="btn-secondary"
+                      onClick={() => generateBL(s, productsWithKeys, sc.code, storeColumns)}
+                    >
+                      {sc.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         {/* Zone dangereuse */}
@@ -2622,12 +2732,16 @@ function AdminSessionDetail({ session, onClose }) {
    PDF GENERATION (BL par magasin)
    ========================================================================= */
 
-function generateBL(session, productsWithKeys, store) {
+function generateBL(session, productsWithKeys, storeCode, storeColumns) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-  const storeName = store.toUpperCase();
-  const storeFullName = { rob: "ROBESPIERRE", tol: "TOLBIAC", pdp: "PORTE DE PANTIN" }[store];
+  // Trouve le label du magasin
+  const storeCol = (storeColumns || []).find(s => s.code === storeCode);
+  const storeName = storeCol ? storeCol.label : storeCode;
+  // Map des noms longs connus
+  const longNames = { ROB: "ROBESPIERRE", TOL: "TOLBIAC", PDP: "PORTE DE PANTIN" };
+  const storeFullName = longNames[storeCode] || storeName;
 
   const date = session.startedAt ? new Date(session.startedAt) : new Date();
   const dateStr = date.toLocaleDateString("fr-FR");
@@ -2678,18 +2792,27 @@ function generateBL(session, productsWithKeys, store) {
 
   y += 10;
 
+  // Helper pour obtenir la qty effective d'un produit pour ce magasin
+  const getQty = (p) => {
+    const st = session.state[p._pkey] || {};
+    if (st.qtyStores && st.qtyStores[storeCode] !== undefined) return st.qtyStores[storeCode];
+    // Compat ancien format
+    if (storeCode === "ROB" && st.qtyRob !== undefined) return st.qtyRob;
+    if (storeCode === "TOL" && st.qtyTol !== undefined) return st.qtyTol;
+    if (storeCode === "PDP" && st.qtyPdp !== undefined) return st.qtyPdp;
+    return (p.stores && p.stores[storeCode]) || 0;
+  };
+
   // Filtre les produits avec quantité > 0 pour ce magasin
   const items = productsWithKeys
     .map(p => {
       const st = session.state[p._pkey] || {};
-      const qty = st[`qty${storeName === "ROB" ? "Rob" : storeName === "TOL" ? "Tol" : "Pdp"}`];
-      const finalQty = qty !== undefined ? qty : p[store];
-      return { ...p, _qty: finalQty, _done: !!st.done };
+      return { ...p, _qty: getQty(p), _done: !!st.done };
     })
     .filter(p => p._qty > 0)
     .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
 
-  // Tableau produits
+  // Tableau
   doc.autoTable({
     startY: y,
     head: [["Code article", "Désignation", "Quantité", "✓"]],
@@ -2706,10 +2829,7 @@ function generateBL(session, productsWithKeys, store) {
       fontStyle: "bold",
       fontSize: 9
     },
-    styles: {
-      fontSize: 9,
-      cellPadding: 2
-    },
+    styles: { fontSize: 9, cellPadding: 2 },
     columnStyles: {
       0: { cellWidth: 32, fontStyle: "bold" },
       1: { cellWidth: 110 },
@@ -2719,7 +2839,6 @@ function generateBL(session, productsWithKeys, store) {
     margin: { left: 14, right: 14 }
   });
 
-  // Pied de page - total
   const totalQty = items.reduce((sum, p) => sum + p._qty, 0);
   const finalY = doc.lastAutoTable.finalY + 5;
 
@@ -2729,7 +2848,6 @@ function generateBL(session, productsWithKeys, store) {
   doc.setFont(undefined, "bold");
   doc.text(`TOTAL : ${items.length} référence(s) — ${totalQty} unité(s)`, 18, finalY + 7);
 
-  // Zone signatures
   const sigY = finalY + 20;
   doc.setFontSize(9);
   doc.setFont(undefined, "normal");
@@ -2738,7 +2856,6 @@ function generateBL(session, productsWithKeys, store) {
   doc.rect(14, sigY + 3, 80, 25);
   doc.rect(110, sigY + 3, 80, 25);
 
-  // Footer
   doc.setFontSize(8);
   doc.setTextColor(150, 150, 150);
   doc.text(
@@ -2746,14 +2863,171 @@ function generateBL(session, productsWithKeys, store) {
     14, 287
   );
 
-  const filename = `BL_${storeName}_${(session.supplier||"").replace(/[^a-zA-Z0-9]/g,"")}_${dateStr.replace(/\//g, "-")}.pdf`;
+  const safeName = (session.supplier || "").replace(/[^a-zA-Z0-9]/g, "");
+  const safeStore = storeCode.replace(/[^a-zA-Z0-9]/g, "");
+  const filename = `BL_${safeStore}_${safeName}_${dateStr.replace(/\//g, "-")}.pdf`;
   doc.save(filename);
 }
 
-function generateAllBLs(session, productsWithKeys) {
-  generateBL(session, productsWithKeys, "rob");
-  setTimeout(() => generateBL(session, productsWithKeys, "tol"), 300);
-  setTimeout(() => generateBL(session, productsWithKeys, "pdp"), 600);
+function generateAllBLs(session, productsWithKeys, storeColumns) {
+  // Détermine les magasins qui ont au moins 1 unité à dispatcher
+  const activeStores = (storeColumns || []).filter(sc => {
+    let total = 0;
+    productsWithKeys.forEach(p => {
+      const st = session.state[p._pkey] || {};
+      const q = (st.qtyStores && st.qtyStores[sc.code] !== undefined)
+        ? st.qtyStores[sc.code]
+        : (p.stores && p.stores[sc.code]) || 0;
+      total += q;
+    });
+    return total > 0;
+  });
+  if (activeStores.length === 0) {
+    alert("Aucun magasin avec des produits à dispatcher.");
+    return;
+  }
+  activeStores.forEach((sc, i) => {
+    setTimeout(() => generateBL(session, productsWithKeys, sc.code, storeColumns), i * 300);
+  });
+}
+
+/* =========================================================================
+   NAMING SCREEN — Pour nommer les magasins/sites inconnus
+   ========================================================================= */
+
+function NamingScreen({ supplier, products, storeColumns, onConfirm, onCancel }) {
+  // Chaque magasin needsNaming a un input pour son nom final
+  const [names, setNames] = useState(() => {
+    const init = {};
+    storeColumns.forEach(s => {
+      if (s.needsNaming) {
+        init[s.code] = s.label; // valeur initiale = label original
+      }
+    });
+    return init;
+  });
+  const [error, setError] = useState("");
+
+  const unknown = storeColumns.filter(s => s.needsNaming);
+  const known = storeColumns.filter(s => !s.needsNaming);
+
+  // Stats par colonne pour aider l'utilisateur à identifier
+  const statsPerColumn = useMemo(() => {
+    const stats = {};
+    storeColumns.forEach(s => {
+      let total = 0, nbProducts = 0;
+      products.forEach(p => {
+        const q = p.stores[s.code] || 0;
+        if (q > 0) {
+          total += q;
+          nbProducts++;
+        }
+      });
+      stats[s.code] = { total, nbProducts };
+    });
+    return stats;
+  }, [products, storeColumns]);
+
+  const handleConfirm = () => {
+    // Vérifier que tous les inconnus ont un nom non vide
+    for (const s of unknown) {
+      const name = (names[s.code] || "").trim();
+      if (!name) {
+        setError(`Donne un nom à la colonne "${s.label}"`);
+        return;
+      }
+    }
+    // Construit la liste finale de storeColumns
+    const finalCols = storeColumns.map(s => {
+      if (s.needsNaming) {
+        const label = names[s.code].trim();
+        // Génère un code propre depuis le label saisi
+        const code = stripAccents(label).toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 20);
+        return { code, label, needsNaming: false };
+      }
+      return s;
+    });
+    // Renomme aussi les codes dans les produits
+    const codeMap = {};
+    storeColumns.forEach((old, i) => {
+      codeMap[old.code] = finalCols[i].code;
+    });
+    const finalProducts = products.map(p => {
+      const newStores = {};
+      for (const oldCode in p.stores) {
+        const newCode = codeMap[oldCode] || oldCode;
+        newStores[newCode] = p.stores[oldCode];
+      }
+      return { ...p, stores: newStores };
+    });
+    onConfirm(finalProducts, finalCols);
+  };
+
+  return (
+    <div className="screen-center" style={{padding: 16}}>
+      <div className="card" style={{maxWidth: 500}}>
+        <h3 style={{margin: "0 0 8px 0"}}>📋 Identifier les magasins</h3>
+        <p style={{fontSize: 13, color: "#666", margin: "0 0 16px 0"}}>
+          Fournisseur : <b>{supplier}</b><br/>
+          {unknown.length} colonne(s) inconnue(s) trouvée(s). Indique à quel site/magasin elles correspondent.
+        </p>
+
+        {known.length > 0 && (
+          <div style={{marginBottom: 16, padding: 10, background: "#e8f5e9", borderRadius: 6}}>
+            <div style={{fontSize: 11, fontWeight: 700, color: "#1a4d2e", marginBottom: 4}}>
+              ✓ MAGASINS RECONNUS AUTOMATIQUEMENT
+            </div>
+            {known.map(s => (
+              <div key={s.code} style={{fontSize: 12, color: "#333"}}>
+                • {s.label} ({statsPerColumn[s.code].total} unités sur {statsPerColumn[s.code].nbProducts} produits)
+              </div>
+            ))}
+          </div>
+        )}
+
+        {unknown.map(s => (
+          <div key={s.code} style={{marginBottom: 16, padding: 12, background: "#fff3e0", borderRadius: 8, border: "1px solid #ffcc80"}}>
+            <div style={{fontSize: 11, fontWeight: 700, color: "#e65100", marginBottom: 4}}>
+              ⚠️ COLONNE INCONNUE
+            </div>
+            <div style={{fontSize: 13, marginBottom: 8}}>
+              Nom dans le fichier : <b>{s.label}</b><br/>
+              <span style={{color: "#666"}}>
+                {statsPerColumn[s.code].total} unités sur {statsPerColumn[s.code].nbProducts} produits
+              </span>
+            </div>
+            <label style={{fontSize: 12, fontWeight: 600, color: "#555"}}>
+              Sigle ou nom du site/magasin
+            </label>
+            <input
+              type="text"
+              value={names[s.code] || ""}
+              onChange={(e) => { setNames(prev => ({...prev, [s.code]: e.target.value})); setError(""); }}
+              placeholder="Ex: BIC, FOR, PDP, Client X..."
+              style={{
+                width: "100%", padding: 10, fontSize: 15, marginTop: 4,
+                border: "1.5px solid #ddd", borderRadius: 6,
+                textTransform: "uppercase"
+              }}
+            />
+          </div>
+        ))}
+
+        {error && (
+          <div style={{color: "#c62828", background: "#ffebee", padding: 10, borderRadius: 6, fontSize: 13, marginBottom: 12}}>
+            {error}
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button className="btn-cancel" onClick={onCancel}>Annuler</button>
+          <button className="btn-confirm" onClick={handleConfirm}>
+            ✓ Démarrer le dispatch
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* =========================================================================
@@ -2768,21 +3042,28 @@ function App() {
     try { return JSON.parse(localStorage.getItem("dispatch_products") || "[]"); }
     catch { return []; }
   });
-  const [view, setView] = useState("dispatch"); // dispatch | recap | admin | adminSession
+  const [storeColumns, setStoreColumns] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dispatch_storeColumns") || "[]"); }
+    catch { return []; }
+  });
+  const [view, setView] = useState("dispatch"); // dispatch | recap | admin | adminSession | naming
   const [recapData, setRecapData] = useState(null);
   const [adminViewingSession, setAdminViewingSession] = useState(null);
+  const [namingData, setNamingData] = useState(null); // { supplier, products, storeColumns }
 
   // Persistance locale du contexte
   useEffect(() => {
     if (sessionId) localStorage.setItem("dispatch_sessionId", sessionId);
     if (supplier) localStorage.setItem("dispatch_supplier", supplier);
     if (products.length > 0) localStorage.setItem("dispatch_products", JSON.stringify(products));
-  }, [sessionId, supplier, products]);
+    if (storeColumns.length > 0) localStorage.setItem("dispatch_storeColumns", JSON.stringify(storeColumns));
+  }, [sessionId, supplier, products, storeColumns]);
 
-  const handleSessionStart = (sid, sup, prods) => {
+  const handleSessionStart = (sid, sup, prods, storeCols) => {
     setSessionId(sid);
     setSupplier(sup);
     setProducts(prods);
+    setStoreColumns(storeCols || []);
     setView("dispatch");
 
     if (firebaseReady) {
@@ -2790,11 +3071,12 @@ function App() {
         supplier: sup,
         startedAt: Date.now(),
         products: prods,
+        storeColumns: storeCols || [],
         createdBy: operator
       });
     }
 
-    // Notification Telegram de démarrage (via Apps Script, non bloquant)
+    // Notification Telegram de démarrage (non bloquant)
     try {
       fetch(APPS_SCRIPT_URL, {
         method: "POST",
@@ -2822,9 +3104,28 @@ function App() {
         setSessionId(sid);
         setSupplier(m.supplier || "Fournisseur");
         setProducts(m.products || []);
+        setStoreColumns(m.storeColumns || []);
         setView("dispatch");
       }
     });
+  };
+
+  const handleNeedsNaming = (data) => {
+    setNamingData(data);
+    setView("naming");
+  };
+
+  const handleNamingConfirm = (finalProducts, finalCols) => {
+    if (!namingData) return;
+    const sup = namingData.supplier;
+    const sessionId = `${stripAccents(sup).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
+    setNamingData(null);
+    handleSessionStart(sessionId, sup, finalProducts, finalCols);
+  };
+
+  const handleNamingCancel = () => {
+    setNamingData(null);
+    setView("dispatch");
   };
 
   const handleFinish = (state, productsWithKeys) => {
@@ -2832,30 +3133,31 @@ function App() {
     setView("recap");
   };
 
-  // QUITTER la session courante SANS rien supprimer (les données restent dans Firebase
-  // et seront visibles par les autres opérateurs / dans l'admin)
   const handleLeaveSession = () => {
     localStorage.removeItem("dispatch_sessionId");
     localStorage.removeItem("dispatch_supplier");
     localStorage.removeItem("dispatch_products");
+    localStorage.removeItem("dispatch_storeColumns");
     setSessionId("");
     setSupplier("");
     setProducts([]);
+    setStoreColumns([]);
     setRecapData(null);
     setView("dispatch");
   };
 
-  // DÉCONNEXION : oublie l'opérateur et revient à l'écran de login
   const handleLogout = () => {
     if (!confirm("Te déconnecter ? Tu pourras te reconnecter avec un autre prénom.")) return;
     localStorage.removeItem("dispatch_operator");
     localStorage.removeItem("dispatch_sessionId");
     localStorage.removeItem("dispatch_supplier");
     localStorage.removeItem("dispatch_products");
+    localStorage.removeItem("dispatch_storeColumns");
     setOperator("");
     setSessionId("");
     setSupplier("");
     setProducts([]);
+    setStoreColumns([]);
     setRecapData(null);
     setView("dispatch");
   };
@@ -2864,7 +3166,19 @@ function App() {
     return <LoginScreen onLogin={setOperator} />;
   }
 
-  // Mode Admin : détail d'une session
+  // Écran de nommage des magasins inconnus
+  if (view === "naming" && namingData) {
+    return (
+      <NamingScreen
+        supplier={namingData.supplier}
+        products={namingData.products}
+        storeColumns={namingData.storeColumns}
+        onConfirm={handleNamingConfirm}
+        onCancel={handleNamingCancel}
+      />
+    );
+  }
+
   if (view === "adminSession" && adminViewingSession) {
     return (
       <AdminSessionDetail
@@ -2874,7 +3188,6 @@ function App() {
     );
   }
 
-  // Mode Admin : liste / stats
   if (view === "admin") {
     if (!isAdmin(operator)) {
       return (
@@ -2904,6 +3217,7 @@ function App() {
         onJoinSession={handleJoinSession}
         onOpenAdmin={() => setView("admin")}
         onLogout={handleLogout}
+        onNeedsNaming={handleNeedsNaming}
       />
     );
   }
@@ -2915,6 +3229,7 @@ function App() {
         operator={operator}
         supplier={supplier}
         products={recapData.products}
+        storeColumns={storeColumns}
         state={recapData.state}
         onClose={() => setView("dispatch")}
         onLeave={handleLeaveSession}
@@ -2928,6 +3243,7 @@ function App() {
       operator={operator}
       supplier={supplier}
       products={products}
+      storeColumns={storeColumns}
       onFinish={handleFinish}
       onLeave={handleLeaveSession}
     />
