@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Kelbongoo - Dispatch Palette</title>
+<title>Kelbongoo - Dispatch palette et MU</title>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -367,6 +367,114 @@
     background: rgba(255,255,255,.2);
   }
   .conn-status.offline { background: #d32f2f; }
+
+  /* ===== Choix du mode (Palette / MU) ===== */
+  .mode-grid { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+  .mode-btn {
+    width: 100%; padding: 26px 18px; border-radius: 16px;
+    background: #fff; border: 2px solid #e6e8ec; text-align: left;
+    box-shadow: 0 4px 16px rgba(0,0,0,.06); transition: all .15s;
+  }
+  .mode-btn:active { transform: scale(.98); }
+  .mode-btn .ico { font-size: 38px; }
+  .mode-btn .ttl { font-size: 20px; font-weight: 800; color: #1a4d2e; margin-top: 6px; }
+  .mode-btn .desc { font-size: 13px; color: #666; margin-top: 4px; line-height: 1.35; }
+  .mode-btn.mu { border-color: #ef6c00; }
+  .mode-btn.mu .ttl { color: #ef6c00; }
+
+  /* ===== Mode MU (mise en unité) ===== */
+  .mu-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 14px; padding: 14px; padding-bottom: 120px;
+  }
+  .mu-card {
+    background: #fff; border: 2px solid #e6e8ec; border-radius: 16px;
+    padding: 18px; display: flex; flex-direction: column;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); transition: all .15s;
+  }
+  .mu-card.active { border-color: #ef6c00; background: #fff8f1; box-shadow: 0 0 0 3px rgba(239,108,0,.15); }
+  .mu-card .mu-name {
+    font-size: 24px; font-weight: 800; line-height: 1.15; color: #1a1a1a;
+    margin-bottom: 12px;
+  }
+  .mu-target {
+    display: inline-flex; align-items: baseline; gap: 8px;
+    background: #1a4d2e; color: #fff; border-radius: 12px;
+    padding: 10px 16px; align-self: flex-start; margin-bottom: 12px;
+  }
+  .mu-target .lbl { font-size: 13px; font-weight: 600; opacity: .85; }
+  .mu-target .num { font-size: 34px; font-weight: 900; line-height: 1; }
+  .mu-sub { font-size: 13px; color: #555; margin-bottom: 6px; display:flex; gap:10px; flex-wrap:wrap; }
+  .mu-sub .done { color: #2e7d32; font-weight: 700; }
+  .mu-busy {
+    font-size: 12px; font-weight: 700; color: #ef6c00;
+    background: #fff3e0; border-radius: 8px; padding: 4px 8px;
+    display: inline-block; margin-bottom: 10px;
+  }
+  .mu-start {
+    margin-top: auto; width: 100%; padding: 18px; font-size: 19px; font-weight: 800;
+    background: #1a4d2e; color: #fff; border-radius: 12px;
+  }
+  .mu-start:active { background: #0d3d20; }
+  .mu-running {
+    margin-top: auto; background: #fff3e0; border-radius: 12px; padding: 12px;
+    text-align: center;
+  }
+  .mu-running .clock {
+    font-size: 40px; font-weight: 900; color: #ef6c00; font-variant-numeric: tabular-nums;
+    letter-spacing: 1px; line-height: 1;
+  }
+  .mu-running .since { font-size: 11px; color: #999; margin-top: 2px; }
+  .mu-running .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .mu-done-btn {
+    flex: 1; padding: 16px; font-size: 17px; font-weight: 800;
+    background: #ef6c00; color: #fff; border-radius: 10px;
+  }
+  .mu-done-btn:active { background: #d35f00; }
+  .mu-cancel-btn {
+    padding: 16px; font-size: 15px; font-weight: 700;
+    background: #fff; color: #999; border: 1.5px solid #ddd; border-radius: 10px;
+  }
+  /* Stepper de saisie du nb de sachets faits */
+  .mu-stepper { margin-top: auto; background: #fff8f1; border-radius: 12px; padding: 14px; }
+  .mu-stepper .q { text-align: center; font-size: 14px; font-weight: 700; color: #555; margin-bottom: 10px; }
+  .mu-stepper .row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .mu-step-pm {
+    width: 58px; height: 58px; border-radius: 50%; font-size: 30px; font-weight: 900;
+    background: #fff; border: 2px solid #ef6c00; color: #ef6c00;
+  }
+  .mu-step-pm:active { background: #ffe0c2; }
+  .mu-step-val {
+    width: 86px; text-align: center; font-size: 44px; font-weight: 900;
+    border: none; background: transparent; color: #1a1a1a;
+  }
+  .mu-step-val:focus { outline: none; }
+  .mu-validate {
+    width: 100%; margin-top: 14px; padding: 16px; font-size: 17px; font-weight: 800;
+    background: #2e7d32; color: #fff; border-radius: 10px;
+  }
+  .mu-validate:active { background: #1b5e20; }
+  .mu-topbar {
+    position: sticky; top: 64px; z-index: 5; background: #fff;
+    padding: 10px 12px; border-bottom: 1px solid #e6e8ec;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .mu-topbar input {
+    flex: 1; padding: 11px 12px; font-size: 15px;
+    border: 1.5px solid #ddd; border-radius: 8px;
+  }
+  .mu-topbar input:focus { outline: none; border-color: #ef6c00; }
+  .mu-refresh {
+    padding: 11px 14px; font-size: 15px; background: #f0f0f0; color: #555; border-radius: 8px; font-weight: 700;
+  }
+  .mu-bottom {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+    background: #1a4d2e; color: #fff; padding: 12px 16px;
+    display: flex; justify-content: space-around; text-align: center;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.1);
+  }
+  .mu-bottom .b-num { font-size: 24px; font-weight: 900; }
+  .mu-bottom .b-lbl { font-size: 11px; opacity: .85; }
 </style>
 </head>
 <body>
@@ -392,6 +500,13 @@ const FIREBASE_CONFIG = {
 
 // URL Apps Script pour envoi du récap (Kelbongoo Distribution Proxy)
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj8BOPRY7V_Ni_0a-6YmNA-1HyRAcf0QXAL1FMy04Xnp1W4Am-cNuR4poQOHzu4VCL4Q/exec";
+
+// === MU (Mise en unité) ===
+// Feuille FL lue côté serveur via le proxy Apps Script (action=get-mu-list).
+// La feuille n'est pas publique : impossible de la lire directement depuis le navigateur,
+// d'où le passage par Apps Script (voir mu_apps_script.gs à ajouter au proxy).
+const MU_SHEET_ID = "1euOgP9n0j_F0XH_kOfb_jFLWkcYy7-Cg6WcTrihPLRI";
+const MU_SHEET_GID = 1075113568;
 
 // Durée de verrouillage d'une ligne (ms) - 30s sans renouvellement = auto-déverrouillage
 const LOCK_DURATION_MS = 30000;
@@ -427,6 +542,28 @@ const fmtDuration = (ms) => {
   if (h > 0) return `${h}h${(m%60).toString().padStart(2,"0")}`;
   if (m > 0) return `${m}min ${s%60}s`;
   return `${s}s`;
+};
+
+// Chrono live mm:ss (ou h:mm:ss)
+const fmtClock = (ms) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const s = total % 60;
+  const m = Math.floor(total / 60) % 60;
+  const h = Math.floor(total / 3600);
+  const pad = (n) => n.toString().padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
+};
+
+// Clé de date du jour (YYYY-MM-DD, heure locale) pour regrouper les MU
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,"0")}-${d.getDate().toString().padStart(2,"0")}`;
+};
+const fmtDateKey = (k) => {
+  if (!k) return "";
+  const [y,m,d] = k.split("-");
+  return new Date(+y, +m-1, +d).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
 };
 
 const stripAccents = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -925,7 +1062,7 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, onLogout, onNeedsNaming }) {
+function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, onLogout, onNeedsNaming, onBackToMode }) {
   const [error, setError] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [pendingFile, setPendingFile] = useState(null);
@@ -1163,6 +1300,15 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
       )}
 
       <div style={{marginTop: 12, width: "100%", maxWidth: 360}}>
+        {onBackToMode && (
+          <button
+            className="btn-secondary"
+            onClick={onBackToMode}
+            style={{fontSize: 13}}
+          >
+            ← Changer de mode
+          </button>
+        )}
         <button
           className="btn-secondary"
           onClick={onLogout}
@@ -2364,6 +2510,9 @@ function AdminScreen({ operator, onClose, onViewSession }) {
         <button className={`tab ${tab === "stats" ? "active" : ""}`} onClick={() => setTab("stats")}>
           📊 Stats
         </button>
+        <button className={`tab ${tab === "mu" ? "active" : ""}`} onClick={() => setTab("mu")}>
+          🥕 MU
+        </button>
       </div>
 
       <div style={{padding: 12, paddingBottom: 80}}>
@@ -2506,6 +2655,11 @@ function AdminScreen({ operator, onClose, onViewSession }) {
               </div>
             )}
           </>
+        )}
+
+        {/* ----- ONGLET MU ----- */}
+        {tab === "mu" && !loading && (
+          <MuAdminTab />
         )}
       </div>
     </div>
@@ -3107,6 +3261,482 @@ function NamingScreen({ supplier, products, storeColumns, onConfirm, onCancel })
 }
 
 /* =========================================================================
+   CHOIX DU MODE (Palette / MU)
+   ========================================================================= */
+
+function ModeChoiceScreen({ operator, onChoose, onOpenAdmin, onLogout }) {
+  return (
+    <div className="screen-center">
+      <div className="logo">Kelbongoo</div>
+      <div className="tag">Bonjour {operator} 👋 — que fais-tu ?</div>
+
+      <div className="mode-grid">
+        <button className="mode-btn" onClick={() => onChoose("palette")}>
+          <div className="ico">🎨</div>
+          <div className="ttl">Dispatch palette</div>
+          <div className="desc">Répartition des produits sur les palettes ROB / TOL.</div>
+        </button>
+
+        <button className="mode-btn mu" onClick={() => onChoose("mu")}>
+          <div className="ico">🥕</div>
+          <div className="ttl">Mise en unité (MU)</div>
+          <div className="desc">Mettre les fruits & légumes en sachets selon les quantités du site.</div>
+        </button>
+      </div>
+
+      {isAdmin(operator) && (
+        <div style={{marginTop: 18, width: "100%", maxWidth: 360}}>
+          <button
+            className="btn-secondary"
+            onClick={onOpenAdmin}
+            style={{background: "#1a4d2e", color: "#fff", fontWeight: 700, padding: 14}}
+          >
+            🔐 Mode Admin
+          </button>
+        </div>
+      )}
+
+      <div style={{marginTop: 12, width: "100%", maxWidth: 360}}>
+        <button className="btn-secondary" onClick={onLogout} style={{fontSize: 13, color: "#666"}}>
+          ↪ Se déconnecter ({operator})
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   MODE MU (mise en unité) — côté préparateur
+   ========================================================================= */
+
+// Une carte produit MU
+function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
+  const [now, setNow] = useState(Date.now());
+  const [step, setStep] = useState(null); // null = pas en saisie, sinon nombre de sachets
+
+  // Chrono live tant qu'une session est en cours sur cette carte
+  useEffect(() => {
+    if (!myActive) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [myActive]);
+
+  const entriesRef = () => db.ref(`mu/${dateKey}/entries`);
+
+  const handleStart = () => {
+    if (!firebaseReady) { alert("Connexion impossible."); return; }
+    const ref = entriesRef().push();
+    ref.set({
+      product: item.product,
+      target: item.target,
+      operator,
+      startedAt: Date.now(),
+      status: "active"
+    });
+  };
+
+  const handleCancel = () => {
+    if (!myActive) return;
+    if (!confirm("Annuler cette mise en unité ?")) return;
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).remove();
+    setStep(null);
+  };
+
+  const openStep = () => setStep(item.target || 0);
+
+  const handleValidate = () => {
+    if (!myActive) return;
+    const done = Math.max(0, parseInt(step, 10) || 0);
+    const finishedAt = Date.now();
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({
+      status: "done",
+      done,
+      finishedAt,
+      durationMs: finishedAt - myActive.startedAt
+    });
+    setStep(null);
+  };
+
+  const running = !!myActive;
+  const inStep = step !== null;
+
+  return (
+    <div className={`mu-card ${running ? "active" : ""}`}>
+      <div className="mu-name">{item.product}</div>
+
+      <div className="mu-target">
+        <span className="lbl">à faire</span>
+        <span className="num">{item.target}</span>
+      </div>
+
+      <div className="mu-sub">
+        {doneCount > 0 && <span className="done">✅ {doneCount} fait{doneCount > 1 ? "s" : ""} aujourd'hui</span>}
+      </div>
+
+      {!running && busyBy.length > 0 && (
+        <div className="mu-busy">🧑 {busyBy.join(", ")} en cours…</div>
+      )}
+
+      {!running && (
+        <button className="mu-start" onClick={handleStart}>▶ Commencer</button>
+      )}
+
+      {running && !inStep && (
+        <div className="mu-running">
+          <div className="clock">{fmtClock(now - myActive.startedAt)}</div>
+          <div className="since">démarré à {fmtTime(myActive.startedAt)}</div>
+          <div className="btns">
+            <button className="mu-cancel-btn" onClick={handleCancel}>✕</button>
+            <button className="mu-done-btn" onClick={openStep}>✓ Terminé</button>
+          </div>
+        </div>
+      )}
+
+      {running && inStep && (
+        <div className="mu-stepper">
+          <div className="q">Combien de sachets faits&nbsp;?</div>
+          <div className="row">
+            <button className="mu-step-pm" onClick={() => setStep(s => Math.max(0, (parseInt(s,10)||0) - 1))}>−</button>
+            <input
+              className="mu-step-val"
+              type="number"
+              inputMode="numeric"
+              value={step}
+              onChange={(e) => setStep(e.target.value)}
+              onFocus={(e) => e.target.select()}
+            />
+            <button className="mu-step-pm" onClick={() => setStep(s => (parseInt(s,10)||0) + 1)}>+</button>
+          </div>
+          <button className="mu-validate" onClick={handleValidate}>Valider</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [entries, setEntries] = useState({}); // { id: entry } pour le jour courant
+  const dateKey = todayKey();
+
+  // Charge la liste des FL à mettre en unité depuis le proxy Apps Script
+  const loadList = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const url = `${APPS_SCRIPT_URL}?action=get-mu-list`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "Erreur de lecture de la feuille");
+      const list = data.items || [];
+      if (list.length === 0) {
+        setError("Aucun FL actif de type MU (« m ») trouvé dans la feuille. Vérifie la colonne TYPE et les colonnes détectées : " + (data.headers ? data.headers.join(" | ") : "?"));
+      }
+      setItems(list);
+    } catch (e) {
+      setError("Impossible de charger la liste : " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadList(); }, [loadList]);
+
+  // Abonnement temps réel aux entrées MU du jour
+  useEffect(() => {
+    if (!firebaseReady) return;
+    const ref = db.ref(`mu/${dateKey}/entries`);
+    const handler = (snap) => {
+      const all = snap.val() || {};
+      const map = {};
+      Object.entries(all).forEach(([id, e]) => { if (e) map[id] = { id, ...e }; });
+      setEntries(map);
+    };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, [dateKey]);
+
+  // Index par produit : compteurs faits + qui est en cours + ma session active
+  const byProduct = useMemo(() => {
+    const idx = {};
+    Object.values(entries).forEach(e => {
+      const p = e.product;
+      if (!idx[p]) idx[p] = { done: 0, doneCount: 0, busy: [], mine: null };
+      if (e.status === "done") {
+        idx[p].doneCount += (e.done || 0);
+      } else if (e.status === "active") {
+        if (e.operator === operator) {
+          // garde la plus récente
+          if (!idx[p].mine || e.startedAt > idx[p].mine.startedAt) idx[p].mine = e;
+        } else if (!idx[p].busy.includes(e.operator)) {
+          idx[p].busy.push(e.operator);
+        }
+      }
+    });
+    return idx;
+  }, [entries, operator]);
+
+  // Totaux du jour
+  const totals = useMemo(() => {
+    let all = 0, mine = 0;
+    Object.values(entries).forEach(e => {
+      if (e.status === "done") {
+        all += (e.done || 0);
+        if (e.operator === operator) mine += (e.done || 0);
+      }
+    });
+    return { all, mine };
+  }, [entries, operator]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return items;
+    const q = stripAccents(search.toLowerCase());
+    return items.filter(it => stripAccents((it.product || "").toLowerCase()).includes(q));
+  }, [items, search]);
+
+  return (
+    <div className="app">
+      <div className="header" style={{background: "#ef6c00"}}>
+        <div className="header-row">
+          <div>
+            <h1>🥕 Mise en unité</h1>
+            <div className="sub">{operator} • {fmtDateKey(dateKey)}</div>
+          </div>
+          <div className="header-actions">
+            {isAdmin(operator) && (
+              <button className="header-btn" onClick={onOpenAdmin}>🔐</button>
+            )}
+            <button className="header-btn" onClick={onBack}>← Mode</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="mu-topbar">
+        <input
+          type="text"
+          placeholder="🔍 Chercher un fruit / légume…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <button className="mu-refresh" onClick={loadList}>↻</button>
+      </div>
+
+      {loading && <div style={{textAlign: "center", padding: 40, color: "#999"}}>Chargement de la liste…</div>}
+
+      {!loading && error && (
+        <div style={{margin: 14, padding: 14, background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 10, fontSize: 13, color: "#bf6000"}}>
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && (
+        <div style={{textAlign: "center", padding: 40, color: "#999"}}>Aucun produit ne correspond.</div>
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div className="mu-grid">
+          {filtered.map((it, idx) => {
+            const info = byProduct[it.product] || { doneCount: 0, busy: [], mine: null };
+            return (
+              <MuCard
+                key={`${it.product}_${idx}`}
+                item={it}
+                operator={operator}
+                dateKey={dateKey}
+                myActive={info.mine}
+                doneCount={info.doneCount}
+                busyBy={info.busy}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      <div className="mu-bottom">
+        <div>
+          <div className="b-num">{totals.mine}</div>
+          <div className="b-lbl">tes sachets</div>
+        </div>
+        <div>
+          <div className="b-num">{totals.all}</div>
+          <div className="b-lbl">total aujourd'hui</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   ONGLET MU DANS LE MASTER (admin) — historique & recap par nom
+   ========================================================================= */
+
+function MuAdminTab() {
+  const [allDays, setAllDays] = useState({}); // { dateKey: { entries } }
+  const [loading, setLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState("");
+
+  useEffect(() => {
+    if (!firebaseReady) { setLoading(false); return; }
+    const ref = db.ref("mu");
+    const handler = (snap) => {
+      const all = snap.val() || {};
+      setAllDays(all);
+      setLoading(false);
+    };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, []);
+
+  const dayKeys = useMemo(
+    () => Object.keys(allDays).sort((a, b) => (a < b ? 1 : -1)),
+    [allDays]
+  );
+
+  // Sélectionne le jour le plus récent par défaut
+  useEffect(() => {
+    if (!selectedDay && dayKeys.length > 0) setSelectedDay(dayKeys[0]);
+  }, [dayKeys, selectedDay]);
+
+  // Entrées "done" du jour sélectionné
+  const dayEntries = useMemo(() => {
+    const d = allDays[selectedDay];
+    if (!d || !d.entries) return [];
+    return Object.values(d.entries)
+      .filter(e => e && e.status === "done")
+      .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+  }, [allDays, selectedDay]);
+
+  // Recap par opérateur
+  const byOperator = useMemo(() => {
+    const m = {};
+    dayEntries.forEach(e => {
+      if (!m[e.operator]) m[e.operator] = { sachets: 0, durationMs: 0, count: 0 };
+      m[e.operator].sachets += (e.done || 0);
+      m[e.operator].durationMs += (e.durationMs || 0);
+      m[e.operator].count += 1;
+    });
+    return Object.entries(m)
+      .map(([name, v]) => ({
+        name,
+        ...v,
+        cadence: v.durationMs > 0 ? (v.sachets / (v.durationMs / 3600000)) : 0 // sachets / h
+      }))
+      .sort((a, b) => b.sachets - a.sachets);
+  }, [dayEntries]);
+
+  // Recap par produit (cible vs fait)
+  const byProduct = useMemo(() => {
+    const m = {};
+    dayEntries.forEach(e => {
+      if (!m[e.product]) m[e.product] = { target: e.target || 0, done: 0 };
+      m[e.product].done += (e.done || 0);
+      // garde la cible max rencontrée
+      if ((e.target || 0) > m[e.product].target) m[e.product].target = e.target || 0;
+    });
+    return Object.entries(m)
+      .map(([product, v]) => ({ product, ...v }))
+      .sort((a, b) => b.done - a.done);
+  }, [dayEntries]);
+
+  const dayTotal = useMemo(
+    () => dayEntries.reduce((s, e) => s + (e.done || 0), 0),
+    [dayEntries]
+  );
+
+  if (loading) return <div style={{textAlign: "center", padding: 40, color: "#999"}}>Chargement…</div>;
+
+  if (dayKeys.length === 0) {
+    return <div style={{textAlign: "center", padding: 40, color: "#999"}}>Aucune mise en unité enregistrée pour l'instant.</div>;
+  }
+
+  return (
+    <div>
+      {/* Sélecteur de jour */}
+      <div style={{marginBottom: 12, overflowX: "auto", display: "flex", gap: 6, paddingBottom: 4}}>
+        {dayKeys.map(k => (
+          <button
+            key={k}
+            onClick={() => setSelectedDay(k)}
+            style={{
+              flex: "0 0 auto", padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 700,
+              background: selectedDay === k ? "#ef6c00" : "#f0f0f0",
+              color: selectedDay === k ? "#fff" : "#555"
+            }}
+          >
+            {fmtDateKey(k)}
+          </button>
+        ))}
+      </div>
+
+      <div className="recap-card">
+        <h3>🥕 {fmtDateKey(selectedDay)}</h3>
+        <div className="recap-stat">
+          <span className="label">Total sachets faits</span>
+          <span className="value">{dayTotal}</span>
+        </div>
+        <div className="recap-stat">
+          <span className="label">Préparateurs</span>
+          <span className="value">{byOperator.length}</span>
+        </div>
+        <div className="recap-stat">
+          <span className="label">Produits traités</span>
+          <span className="value">{byProduct.length}</span>
+        </div>
+      </div>
+
+      {/* Recap par nom */}
+      <div className="recap-card">
+        <h3>👤 Par préparateur</h3>
+        {byOperator.length === 0 && <div style={{color:"#999", fontSize:13}}>Aucune donnée.</div>}
+        {byOperator.map(o => (
+          <div className="recap-stat" key={o.name}>
+            <span className="label">
+              <strong>{o.name}</strong>
+              <span style={{color:"#999", marginLeft:6, fontSize:11}}>
+                {fmtDuration(o.durationMs)} • {o.cadence.toFixed(0)} sachets/h
+              </span>
+            </span>
+            <span className="value">{o.sachets} sachets</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Recap par produit */}
+      <div className="recap-card">
+        <h3>📦 Par produit (estimé / fait)</h3>
+        {byProduct.map(p => (
+          <div className="recap-stat" key={p.product}>
+            <span className="label">{p.product}</span>
+            <span className="value">
+              <span style={{color:"#999", fontWeight:600}}>{p.target} →</span> {p.done}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Historique détaillé */}
+      <div className="recap-card">
+        <h3>🕓 Historique détaillé</h3>
+        {dayEntries.map((e, i) => (
+          <div className="recap-stat" key={i} style={{flexWrap:"wrap"}}>
+            <span className="label" style={{flex:"1 1 60%"}}>
+              <strong>{e.product}</strong> — {e.operator}
+              <div style={{fontSize:11, color:"#999"}}>
+                {fmtTime(e.startedAt)} → {fmtTime(e.finishedAt)} • {fmtDuration(e.durationMs || 0)}
+              </div>
+            </span>
+            <span className="value">{e.done} <span style={{color:"#999", fontWeight:600, fontSize:11}}>/ {e.target} est.</span></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
    APP ROOT
    ========================================================================= */
 
@@ -3123,6 +3753,7 @@ function App() {
     catch { return []; }
   });
   const [view, setView] = useState("dispatch"); // dispatch | recap | admin | adminSession | naming
+  const [mode, setMode] = useState(localStorage.getItem("dispatch_mode") || ""); // "" | "palette" | "mu"
   const [recapData, setRecapData] = useState(null);
   const [adminViewingSession, setAdminViewingSession] = useState(null);
   const [namingData, setNamingData] = useState(null); // { supplier, products, storeColumns }
@@ -3134,6 +3765,18 @@ function App() {
     if (products.length > 0) localStorage.setItem("dispatch_products", JSON.stringify(products));
     if (storeColumns.length > 0) localStorage.setItem("dispatch_storeColumns", JSON.stringify(storeColumns));
   }, [sessionId, supplier, products, storeColumns]);
+
+  const handleChooseMode = (m) => {
+    localStorage.setItem("dispatch_mode", m);
+    setMode(m);
+    setView("dispatch");
+  };
+
+  const handleBackToMode = () => {
+    localStorage.removeItem("dispatch_mode");
+    setMode("");
+    setView("dispatch");
+  };
 
   const handleSessionStart = (sid, sup, prods, storeCols) => {
     setSessionId(sid);
@@ -3229,12 +3872,14 @@ function App() {
     localStorage.removeItem("dispatch_supplier");
     localStorage.removeItem("dispatch_products");
     localStorage.removeItem("dispatch_storeColumns");
+    localStorage.removeItem("dispatch_mode");
     setOperator("");
     setSessionId("");
     setSupplier("");
     setProducts([]);
     setStoreColumns([]);
     setRecapData(null);
+    setMode("");
     setView("dispatch");
   };
 
@@ -3285,6 +3930,31 @@ function App() {
     );
   }
 
+  // Choix du mode après connexion
+  if (!mode) {
+    return (
+      <ModeChoiceScreen
+        operator={operator}
+        onChoose={handleChooseMode}
+        onOpenAdmin={() => setView("admin")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // Mode Mise en unité
+  if (mode === "mu") {
+    return (
+      <MUScreen
+        operator={operator}
+        onBack={handleBackToMode}
+        onOpenAdmin={() => setView("admin")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // ----- Mode Palette (dispatch classique) -----
   if (!sessionId || products.length === 0) {
     return (
       <UploadScreen
@@ -3294,6 +3964,7 @@ function App() {
         onOpenAdmin={() => setView("admin")}
         onLogout={handleLogout}
         onNeedsNaming={handleNeedsNaming}
+        onBackToMode={handleBackToMode}
       />
     );
   }
