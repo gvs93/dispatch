@@ -755,8 +755,36 @@ function parseExcelFile(workbook) {
     });
   }
 
+  // Calcule le total de chaque colonne magasin
+  const storeTotals = {};
+  storeColumns.forEach(sc => { storeTotals[sc.def.code] = 0; });
+  products.forEach(p => {
+    storeColumns.forEach(sc => {
+      storeTotals[sc.def.code] += (p.stores[sc.def.code] || 0);
+    });
+  });
+
+  // Ignore les colonnes magasin INCONNUES dont le total est 0
+  // (ex: Magasin 05 sans commande aujourd'hui → on ne demande pas son nom)
+  const keptStoreCols = storeColumns.filter(sc => {
+    if (sc.def.needsNaming && storeTotals[sc.def.code] === 0) {
+      return false; // colonne inconnue et vide → on l'ignore
+    }
+    return true;
+  });
+
+  // Nettoie aussi les produits : retire les clés des magasins qu'on ignore
+  const removedCodes = storeColumns
+    .filter(sc => !keptStoreCols.some(k => k.def.code === sc.def.code))
+    .map(sc => sc.def.code);
+  if (removedCodes.length > 0) {
+    products.forEach(p => {
+      removedCodes.forEach(code => { delete p.stores[code]; });
+    });
+  }
+
   // Retourne aussi les définitions de magasins (pour l'écran de nommage si besoin)
-  return { products, storeColumns: storeColumns.map(s => s.def) };
+  return { products, storeColumns: keptStoreCols.map(s => s.def) };
 }
 
 
