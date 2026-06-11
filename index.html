@@ -588,13 +588,23 @@ const productKey = (p, idx) => {
 // Normalise un nom de colonne pour le matching (sans accents, lowercase, trim)
 const normCol = (s) => stripAccents((s||"").toString()).toLowerCase().trim();
 
-// Mapping des codes magasin G5 vers nos noms
-// Magasin 01 = ROB, Magasin 03 = TOL, Magasin 98 = PDP
+// Mapping codes G5 (Magasin XX) → sigle
 const G5_STORE_MAP = {
-  "01": "rob",
-  "03": "tol",
-  "98": "pdp"
+  "01": "rob", "03": "tol", "98": "pdp",
+  "05": "bic", "02": "bar", "04": "bor",
+  "06": "ces", "07": "cha", "09": "for",
+  "10": "lil", "11": "nca", "12": "ncc",
+  "13": "pad", "14": "pdc", "17": "rom",
+  "18": "stb"
 };
+
+// Sigles reconnus nativement en en-tête de colonne (insensible à la casse, token exact)
+const KNOWN_STORE_CODES = new Set([
+  "rob", "tol", "pdp", "bic",
+  "bar", "bor", "ces", "cha", "dom",
+  "for", "lil", "nca", "ncc", "pad",
+  "pdc", "rom", "stb"
+]);
 
 // Parse une cellule G5 qui peut être au format "07-1-59 ||| 36.000000"
 // Retourne le nombre après les ||| ou simplement la valeur si pas de ||| .
@@ -633,17 +643,19 @@ function parseExcelFile(workbook) {
   const detectStoreColumn = (cellRaw, cellNorm) => {
     if (!cellNorm) return null;
 
-    // Match exact des sigles connus
-    if (cellNorm === "rob") return { code: "ROB", label: "ROB", needsNaming: false };
-    if (cellNorm === "tol") return { code: "TOL", label: "TOL", needsNaming: false };
-    if (cellNorm === "pdp") return { code: "PDP", label: "PDP", needsNaming: false };
+    // Match exact d'un sigle connu (ROB, TOL, PDP, BIC, BAR, BOR, etc.)
+    if (KNOWN_STORE_CODES.has(cellNorm)) {
+      const uc = cellNorm.toUpperCase();
+      return { code: uc, label: uc, needsNaming: false };
+    }
 
-    // Format G5 : Magasin XX
+    // Format G5 : "Magasin XX"
     if (cellNorm.startsWith("magasin")) {
       const code = cellNorm.replace("magasin", "").trim();
       const mapped = G5_STORE_MAP[code];
       if (mapped) {
-        return { code: mapped.toUpperCase(), label: mapped.toUpperCase(), needsNaming: false };
+        const uc = mapped.toUpperCase();
+        return { code: uc, label: uc, needsNaming: false };
       }
       // Magasin XX inconnu → demander un nom
       return {
@@ -654,11 +666,14 @@ function parseExcelFile(workbook) {
       };
     }
 
-    // Mot ROB/TOL/PDP isolé dans "Commande ROB", "Cmd PDP", etc.
+    // Token d'un sigle connu dans "Commande ROB", "Cmd BIC", etc.
     const tokens = cellNorm.split(/[\s\-_()\/]+/).filter(Boolean);
-    if (tokens.includes("rob")) return { code: "ROB", label: "ROB", needsNaming: false };
-    if (tokens.includes("tol")) return { code: "TOL", label: "TOL", needsNaming: false };
-    if (tokens.includes("pdp")) return { code: "PDP", label: "PDP", needsNaming: false };
+    for (const t of tokens) {
+      if (KNOWN_STORE_CODES.has(t)) {
+        const uc = t.toUpperCase();
+        return { code: uc, label: uc, needsNaming: false };
+      }
+    }
 
     return null;
   };
@@ -1840,6 +1855,22 @@ function DispatchScreen({ sessionId, operator, supplier, products, storeColumns,
     }
   };
 
+  // Re-télécharge un xlsx reconstruit depuis les données en mémoire
+  const downloadBdc = () => {
+    const header = ["Article", "Désignation", "Quantité reçue", ...storeColumns.map(s => s.label)];
+    const dataRows = sortedProducts.map(p => [
+      p.article || "",
+      p.designation || "",
+      p.received ?? "",
+      ...storeColumns.map(s => p.stores?.[s.code] ?? 0)
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Dispatch");
+    const clean = (s) => (s || "").replace(/[^a-zA-Z0-9_\-]/g, "_");
+    XLSX.writeFile(wb, `Dispatch_${clean(supplier)}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
   return (
     <div className="app">
       <div className="header">
@@ -1853,6 +1884,14 @@ function DispatchScreen({ sessionId, operator, supplier, products, storeColumns,
             </div>
           </div>
           <div className="header-actions">
+            <button
+              className="header-btn"
+              onClick={downloadBdc}
+              title="Re-télécharger le fichier"
+              style={{background: "rgba(255,255,255,.15)"}}
+            >
+              ⬇ BL
+            </button>
             <button
               className="header-btn"
               onClick={() => setViewMode(viewMode === "list" ? "scan" : "list")}
