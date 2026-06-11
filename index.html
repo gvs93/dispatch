@@ -1466,11 +1466,7 @@ function ProductCard({ product, pkey, status, operator, storeColumns, onLock, on
     if (status.qtyStores && status.qtyStores[code] !== undefined) {
       return status.qtyStores[code];
     }
-    // Compat ancienne version (rob/tol/pdp dans status)
-    if (code === "ROB" && status.qtyRob !== undefined) return status.qtyRob;
-    if (code === "TOL" && status.qtyTol !== undefined) return status.qtyTol;
-    if (code === "PDP" && status.qtyPdp !== undefined) return status.qtyPdp;
-    // Fallback : la valeur initiale du produit
+    // Fallback : la valeur initiale du produit (parsée du fichier)
     return (product.stores && product.stores[code]) || 0;
   };
   const recue = status.qtyRecue !== undefined ? status.qtyRecue : product.recue;
@@ -2126,10 +2122,6 @@ function RecapScreen({ sessionId, operator, supplier, products, storeColumns, st
       const s = state[p._pkey];
       if (!s) return (p.stores && p.stores[code]) || 0;
       if (s.qtyStores && s.qtyStores[code] !== undefined) return s.qtyStores[code];
-      // Compat ancienne version
-      if (code === "ROB" && s.qtyRob !== undefined) return s.qtyRob;
-      if (code === "TOL" && s.qtyTol !== undefined) return s.qtyTol;
-      if (code === "PDP" && s.qtyPdp !== undefined) return s.qtyPdp;
       return (p.stores && p.stores[code]) || 0;
     };
 
@@ -2842,23 +2834,12 @@ function AdminSessionDetail({ session, onClose }) {
   const getEffectiveQty = (p, code) => {
     const st = s.state[p._pkey];
     if (st && st.qtyStores && st.qtyStores[code] !== undefined) return st.qtyStores[code];
-    // Compat ancien format
-    if (st && code === "ROB" && st.qtyRob !== undefined) return st.qtyRob;
-    if (st && code === "TOL" && st.qtyTol !== undefined) return st.qtyTol;
-    if (st && code === "PDP" && st.qtyPdp !== undefined) return st.qtyPdp;
-    // Valeurs prévues
+    // Valeurs prévues (parsées du fichier)
     if (p.stores && p.stores[code] !== undefined) return p.stores[code];
-    // Compat fichiers très anciens
-    if (code === "ROB" && p.rob !== undefined) return p.rob;
-    if (code === "TOL" && p.tol !== undefined) return p.tol;
-    if (code === "PDP" && p.pdp !== undefined) return p.pdp;
     return 0;
   };
   const getPlanned = (p, code) => {
     if (p.stores && p.stores[code] !== undefined) return p.stores[code];
-    if (code === "ROB" && p.rob !== undefined) return p.rob;
-    if (code === "TOL" && p.tol !== undefined) return p.tol;
-    if (code === "PDP" && p.pdp !== undefined) return p.pdp;
     return 0;
   };
 
