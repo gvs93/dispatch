@@ -598,12 +598,25 @@ const G5_STORE_MAP = {
   "18": "stb"
 };
 
-// Sigles reconnus nativement en en-tête de colonne (insensible à la casse, token exact)
-const KNOWN_STORE_CODES = new Set([
-  "rob", "tol", "pdp", "bic",
-  "bar", "bor", "ces", "cha", "dom",
-  "for", "lil", "nca", "ncc", "pad",
-  "pdc", "rom", "stb"
+// Colonnes "système" à ne jamais interpréter comme un magasin.
+// On utilise une LISTE NOIRE (mots-clés connus) plutôt qu'une liste blanche de sites :
+// ainsi tout nouveau site est reconnu automatiquement sans modifier le code.
+const NON_STORE_KEYWORDS = new Set([
+  // identifiants produit
+  "article", "code article", "code", "ref", "reference", "ean", "barcode", "sku",
+  // désignations
+  "designation", "libelle", "nom", "produit", "description",
+  // quantités système
+  "quantite", "qte", "qty", "uvc", "uc", "cde", "cde en uvc", "commande en uvc",
+  "commande", "cmd",
+  // réceptions
+  "recue", "receptionnee", "recu", "reception",
+  "quantite receptionnee", "quantites receptionnees",
+  "quantite cmd frs", "quantite cmd",
+  // prix / poids
+  "prix", "tarif", "poids", "poids kg", "kg", "tva",
+  // colonne vide
+  ""
 ]);
 
 // Parse une cellule G5 qui peut être au format "07-1-59 ||| 36.000000"
@@ -640,36 +653,36 @@ function parseExcelFile(workbook) {
   // - "Magasin XX" non mappé → inconnu (needsNaming)
   // - "Commande ROB" / "ROB Commande" → reconnu
   // - Autre nom → null
+  // Détecte si un en-tête est un magasin.
+  // Aucune liste blanche de codes : tout sigle court non-système est accepté.
+  // → un nouveau site (ex: "XYZ") sera reconnu sans toucher au code.
+  const isSigle = (s) => /^[a-z0-9]{2,6}$/.test(s) && !NON_STORE_KEYWORDS.has(s);
+
   const detectStoreColumn = (cellRaw, cellNorm) => {
     if (!cellNorm) return null;
-
-    // Match exact d'un sigle connu (ROB, TOL, PDP, BIC, BAR, BOR, etc.)
-    if (KNOWN_STORE_CODES.has(cellNorm)) {
-      const uc = cellNorm.toUpperCase();
-      return { code: uc, label: uc, needsNaming: false };
-    }
+    if (NON_STORE_KEYWORDS.has(cellNorm)) return null;
 
     // Format G5 : "Magasin XX"
     if (cellNorm.startsWith("magasin")) {
-      const code = cellNorm.replace("magasin", "").trim();
+      const code = cellNorm.replace(/^magasin\s*/, "").trim();
       const mapped = G5_STORE_MAP[code];
       if (mapped) {
         const uc = mapped.toUpperCase();
         return { code: uc, label: uc, needsNaming: false };
       }
-      // Magasin XX inconnu → demander un nom
-      return {
-        code: `MAGASIN_${code}`,
-        label: `Magasin ${code}`,
-        needsNaming: true,
-        originalHeader: cellRaw
-      };
+      return { code: `MAGASIN_${code}`, label: `Magasin ${code}`, needsNaming: true, originalHeader: cellRaw };
     }
 
-    // Token d'un sigle connu dans "Commande ROB", "Cmd BIC", etc.
+    // En-tête court (2-6 chars alphanums) → sigle de site
+    if (isSigle(cellNorm)) {
+      const uc = cellNorm.toUpperCase();
+      return { code: uc, label: uc, needsNaming: false };
+    }
+
+    // Token court dans libellé composé : "Livraison BIC", "Cmd ROB", "Qté NCA"
     const tokens = cellNorm.split(/[\s\-_()\/]+/).filter(Boolean);
     for (const t of tokens) {
-      if (KNOWN_STORE_CODES.has(t)) {
+      if (isSigle(t)) {
         const uc = t.toUpperCase();
         return { code: uc, label: uc, needsNaming: false };
       }
@@ -1524,17 +1537,26 @@ function ProductCard({ product, pkey, status, operator, storeColumns, onLock, on
         )}
       </div>
 
-      <div className="dest-row" style={{gridTemplateColumns: gridCols}}>
-        {storeColumns.map(s => {
-          const q = effectiveQtyStores[s.code];
-          return (
-            <div className="dest-cell" key={s.code}>
-              <div className="name">{s.label}</div>
-              <div className={`qty ${q === 0 ? "zero" : ""}`}>{q}</div>
-            </div>
-          );
-        })}
-      </div>
+      {/* Sur la carte : on masque les locaux à 0 pour ne montrer que ce qui est à dispatcher.
+          Le modal d'édition (EditModal) affiche toujours tous les locaux. */}
+      {(() => {
+        const visibleCols = storeColumns.filter(s => effectiveQtyStores[s.code] > 0);
+        const displayCols = visibleCols.length > 0 ? visibleCols : storeColumns; // fallback : tout afficher si tout est à 0
+        const gridCols2 = `repeat(${displayCols.length}, 1fr)`;
+        return (
+          <div className="dest-row" style={{gridTemplateColumns: gridCols2}}>
+            {displayCols.map(s => {
+              const q = effectiveQtyStores[s.code];
+              return (
+                <div className="dest-cell" key={s.code}>
+                  <div className="name">{s.label}</div>
+                  <div className="qty">{q}</div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {!isDone && !reallyLocked && (
         <div className="actions-row">
