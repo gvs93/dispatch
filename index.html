@@ -1099,7 +1099,7 @@ function LoginScreen({ onLogin }) {
   );
 }
 
-function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, onLogout, onNeedsNaming, onBackToMode }) {
+function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, onLogout, onNeedsNaming, onBackToMode, onReset }) {
   const [error, setError] = useState("");
   const [supplierName, setSupplierName] = useState("");
   const [pendingFile, setPendingFile] = useState(null);
@@ -1344,6 +1344,15 @@ function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, on
             style={{fontSize: 13}}
           >
             ← Changer de mode
+          </button>
+        )}
+        {onReset && (
+          <button
+            className="btn-secondary"
+            onClick={onReset}
+            style={{fontSize: 13, color: "#c62828", borderColor: "#ffcdd2"}}
+          >
+            🔄 Réinitialiser (vider le cache)
           </button>
         )}
         <button
@@ -3920,6 +3929,21 @@ function App() {
     setView("dispatch");
   };
 
+  const handleResetCache = () => {
+    if (!confirm("Vider le cache de l'app ?\n\nCela supprime la session en cours sur CET appareil et toutes les données de produits en mémoire. À faire si les quantités affichées sont fausses. Tu devras recharger le fichier.")) return;
+    // Purge toutes les clés liées au dispatch (sauf prénom et mode)
+    Object.keys(localStorage)
+      .filter(k => k.startsWith("dispatch_") && k !== "dispatch_operator" && k !== "dispatch_mode")
+      .forEach(k => localStorage.removeItem(k));
+    setSessionId("");
+    setSupplier("");
+    setProducts([]);
+    setStoreColumns([]);
+    setRecapData(null);
+    setView("dispatch");
+    setTimeout(() => window.location.reload(), 100);
+  };
+
   const handleLogout = () => {
     if (!confirm("Te déconnecter ? Tu pourras te reconnecter avec un autre prénom.")) return;
     localStorage.removeItem("dispatch_operator");
@@ -4020,6 +4044,7 @@ function App() {
         onLogout={handleLogout}
         onNeedsNaming={handleNeedsNaming}
         onBackToMode={handleBackToMode}
+        onReset={handleResetCache}
       />
     );
   }
