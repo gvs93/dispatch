@@ -885,6 +885,9 @@ function parseExcelFile(workbook) {
     const parse = isG5Format ? parseG5Cell : (v) => {
       if (v === "" || v === null || v === undefined) return 0;
       const s = v.toString().trim();
+      // Détecte le format G5 à la volée sur le contenu de la cellule
+      // (cas où les en-têtes sont ROB/TOL/BIC mais les valeurs sont au format G5)
+      if (s.includes("|||")) return parseG5Cell(s);
       const m = s.match(/^(\d+)\s*u/);
       if (m) return parseInt(m[1], 10);
       const cleaned = s.replace(",", ".");
