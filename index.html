@@ -511,7 +511,7 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj8BOPRY7V_Ni_
 // Feuille FL lue côté serveur via le proxy Apps Script (action=get-mu-list).
 // La feuille n'est pas publique : impossible de la lire directement depuis le navigateur,
 // d'où le passage par Apps Script (voir mu_apps_script.gs à ajouter au proxy).
-const MU_SHEET_ID = "1euOgP9n0j_F0XH_kOfb_jFLWkcYy7-Cg6WcTrihPLRI";
+const MU_SHEET_ID = "1PXQU4QP_bh_sRCEHonrMM7FkWmJWtNPyxDBPPRBlNVQ"; // sheet COMMANDE FL KBG x PROBON
 const MU_SHEET_GID = 1075113568;
 
 // Durée de verrouillage d'une ligne (ms) - 30s sans renouvellement = auto-déverrouillage
@@ -3332,9 +3332,9 @@ function ModeChoiceScreen({ operator, onChoose, onOpenAdmin, onLogout }) {
 
       <div className="mode-grid">
         <button className="mode-btn" onClick={() => onChoose("palette")}>
-          <div className="ico">🎨</div>
+          <div className="ico">🪵</div>
           <div className="ttl">Dispatch palette</div>
-          <div className="desc">Répartition des produits sur les palettes ROB / TOL.</div>
+          <div className="desc">Répartition des colis sur les palettes de livraison par site.</div>
         </button>
 
         <button className="mode-btn mu" onClick={() => onChoose("mu")}>
@@ -3371,107 +3371,199 @@ function ModeChoiceScreen({ operator, onChoose, onOpenAdmin, onLogout }) {
 
 // Une carte produit MU
 function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
-  const [now, setNow] = useState(Date.now());
-  const [step, setStep] = useState(null); // null = pas en saisie, sinon nombre de sachets
+  const [now, setNow]           = useState(Date.now());
+  // "idle"|"running"|"paused"|"finishing"
+  const [phase, setPhase]       = useState(myActive ? (myActive.status === "paused" ? "paused" : "running") : "idle");
+  const [inProgress, setInProgress] = useState(""); // quantité en cours (saisie mid-session)
+  const [finalQty, setFinalQty]  = useState("");    // quantité finale avant validation
 
-  // Chrono live tant qu'une session est en cours sur cette carte
+  // Sync phase si myActive change depuis Firebase (autre onglet / reload)
   useEffect(() => {
-    if (!myActive) return;
+    if (!myActive) { setPhase("idle"); return; }
+    setPhase(myActive.status === "paused" ? "paused" : "running");
+    if (myActive.inProgress != null) setInProgress(String(myActive.inProgress));
+  }, [myActive && myActive.id, myActive && myActive.status]);
+
+  // Chrono live en mode running
+  useEffect(() => {
+    if (phase !== "running") return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [myActive]);
+  }, [phase]);
 
-  const entriesRef = () => db.ref(`mu/${dateKey}/entries`);
+  const entRef = () => db.ref(`mu/${dateKey}/entries`);
 
+  /* ---- actions ---- */
   const handleStart = () => {
     if (!firebaseReady) { alert("Connexion impossible."); return; }
-    const ref = entriesRef().push();
-    ref.set({
-      product: item.product,
-      target: item.target,
+    entRef().push().set({
+      product:   item.produit || item.product,
+      target:    item.estimation || item.target || 0,
       operator,
       startedAt: Date.now(),
-      status: "active"
+      elapsedMs: 0,
+      inProgress: 0,
+      status:    "active"
     });
+  };
+
+  const handlePause = () => {
+    if (!myActive) return;
+    const elapsed = (myActive.elapsedMs || 0) + (Date.now() - myActive.startedAt);
+    // sauve quantité en cours si saisie
+    const ip = parseInt(inProgress, 10) || myActive.inProgress || 0;
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({
+      status:     "paused",
+      elapsedMs:  elapsed,
+      pausedAt:   Date.now(),
+      inProgress: ip,
+    });
+    setPhase("paused");
+  };
+
+  const handleResume = () => {
+    if (!myActive) return;
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({
+      status:    "active",
+      startedAt: Date.now(), // reset chrono depuis reprise
+    });
+    setPhase("running");
   };
 
   const handleCancel = () => {
     if (!myActive) return;
     if (!confirm("Annuler cette mise en unité ?")) return;
     db.ref(`mu/${dateKey}/entries/${myActive.id}`).remove();
-    setStep(null);
+    setPhase("idle"); setInProgress(""); setFinalQty("");
   };
 
-  const openStep = () => setStep(item.target || 0);
+  // Sauvegarde la quantité en cours (intermédiaire) sans terminer
+  const saveInProgress = () => {
+    if (!myActive) return;
+    const v = parseInt(inProgress, 10);
+    if (isNaN(v) || v < 0) return;
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ inProgress: v });
+  };
+
+  const openFinish = () => {
+    // pré-remplit avec max(inProgress, doneCount déjà, target)
+    const ip = parseInt(inProgress, 10) || myActive?.inProgress || 0;
+    setFinalQty(String(Math.max(ip, item.estimation || item.target || 0)));
+    setPhase("finishing");
+  };
 
   const handleValidate = () => {
     if (!myActive) return;
-    const done = Math.max(0, parseInt(step, 10) || 0);
+    const done = Math.max(0, parseInt(finalQty, 10) || 0);
     const finishedAt = Date.now();
+    const elapsed = (myActive.elapsedMs || 0) + (phase !== "paused" ? finishedAt - (myActive.startedAt || finishedAt) : 0);
     db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({
-      status: "done",
+      status:     "done",
       done,
       finishedAt,
-      durationMs: finishedAt - myActive.startedAt
+      durationMs: elapsed,
+      inProgress: done,
     });
-    setStep(null);
+    setPhase("idle"); setInProgress(""); setFinalQty("");
   };
 
-  const running = !!myActive;
-  const inStep = step !== null;
+  const estimation = item.estimation || item.target || "—";
+  const elapsedDisplay = myActive
+    ? fmtClock((myActive.elapsedMs || 0) + (phase === "running" ? now - (myActive.startedAt || now) : 0))
+    : "0:00";
 
   return (
-    <div className={`mu-card ${running ? "active" : ""}`}>
-      <div className="mu-name">{item.product}</div>
+    <div className={`mu-card ${phase !== "idle" ? "active" : ""} ${phase === "paused" ? "paused" : ""}`}>
+      <div className="mu-name">{item.produit || item.product}</div>
+      <div style={{fontSize:11,color:"#888",marginBottom:4}}>{item.producer || ""}</div>
 
-      {item.fourchette && (
-        <div className="mu-fourchette">📏 Unité de vente&nbsp;: <b>{item.fourchette}</b></div>
+      {item.uv && (
+        <div className="mu-fourchette">📏 {item.uv}</div>
       )}
 
+      {/* Cible = ESTIMATION MU DU JOUR */}
       <div className="mu-target">
-        <span className="lbl">à faire</span>
-        <span className="num">{item.target}</span>
+        <span className="lbl">à faire (estimation)</span>
+        <span className="num" style={{color: estimation === "—" ? "#ccc" : undefined}}>{estimation}</span>
       </div>
 
       <div className="mu-sub">
         {doneCount > 0 && <span className="done">✅ {doneCount} fait{doneCount > 1 ? "s" : ""} aujourd'hui</span>}
+        {!myActive && busyBy.length > 0 && (
+          <span className="mu-busy">🧑 {busyBy.join(", ")} en cours…</span>
+        )}
       </div>
 
-      {!running && busyBy.length > 0 && (
-        <div className="mu-busy">🧑 {busyBy.join(", ")} en cours…</div>
-      )}
-
-      {!running && (
+      {/* ---- IDLE ---- */}
+      {phase === "idle" && (
         <button className="mu-start" onClick={handleStart}>▶ Commencer</button>
       )}
 
-      {running && !inStep && (
+      {/* ---- RUNNING ---- */}
+      {phase === "running" && (
         <div className="mu-running">
-          <div className="clock">{fmtClock(now - myActive.startedAt)}</div>
+          <div className="clock">{elapsedDisplay}</div>
           <div className="since">démarré à {fmtTime(myActive.startedAt)}</div>
-          <div className="btns">
-            <button className="mu-cancel-btn" onClick={handleCancel}>✕</button>
-            <button className="mu-done-btn" onClick={openStep}>✓ Terminé</button>
+
+          {/* Quantité en cours (intermédiaire) */}
+          <div style={{margin:"8px 0",display:"flex",alignItems:"center",gap:6,justifyContent:"center"}}>
+            <span style={{fontSize:12,color:"#666"}}>En cours :</span>
+            <input
+              type="number" inputMode="numeric"
+              value={inProgress}
+              onChange={e => setInProgress(e.target.value)}
+              onBlur={saveInProgress}
+              placeholder="0"
+              style={{width:60,textAlign:"center",fontSize:15,padding:"4px",borderRadius:6,border:"1px solid #ccc"}}
+            />
+            <span style={{fontSize:12,color:"#666"}}>sachets</span>
+          </div>
+
+          <div className="btns" style={{gap:8}}>
+            <button className="mu-cancel-btn" onClick={handleCancel} title="Annuler">✕</button>
+            <button className="mu-pause-btn" onClick={handlePause} title="Pause">⏸ Pause</button>
+            <button className="mu-done-btn" onClick={openFinish}>✓ Terminé</button>
           </div>
         </div>
       )}
 
-      {running && inStep && (
+      {/* ---- PAUSED ---- */}
+      {phase === "paused" && (
+        <div className="mu-running" style={{background:"#fff8e1"}}>
+          <div className="clock" style={{color:"#f59e0b"}}>⏸ {elapsedDisplay}</div>
+          <div className="since" style={{color:"#a07000"}}>
+            En cours : {myActive?.inProgress || 0} sachet{(myActive?.inProgress||0) > 1 ? "s" : ""}
+          </div>
+          <div className="btns" style={{gap:8,marginTop:8}}>
+            <button className="mu-cancel-btn" onClick={handleCancel} title="Annuler">✕</button>
+            <button className="mu-start" style={{flex:1}} onClick={handleResume}>▶ Reprendre</button>
+            <button className="mu-done-btn" onClick={openFinish}>✓ Terminé</button>
+          </div>
+        </div>
+      )}
+
+      {/* ---- FINISHING : saisie quantité totale ---- */}
+      {phase === "finishing" && (
         <div className="mu-stepper">
-          <div className="q">Combien de sachets faits&nbsp;?</div>
+          <div className="q">Quantité totale faite&nbsp;?</div>
+          <div style={{fontSize:12,color:"#888",marginBottom:6}}>
+            (estimation : {estimation} · en cours : {myActive?.inProgress || 0})
+          </div>
           <div className="row">
-            <button className="mu-step-pm" onClick={() => setStep(s => Math.max(0, (parseInt(s,10)||0) - 1))}>−</button>
+            <button className="mu-step-pm" onClick={() => setFinalQty(s => String(Math.max(0, (parseInt(s,10)||0) - 1)))}>−</button>
             <input
               className="mu-step-val"
-              type="number"
-              inputMode="numeric"
-              value={step}
-              onChange={(e) => setStep(e.target.value)}
-              onFocus={(e) => e.target.select()}
+              type="number" inputMode="numeric"
+              value={finalQty}
+              onChange={e => setFinalQty(e.target.value)}
+              onFocus={e => e.target.select()}
             />
-            <button className="mu-step-pm" onClick={() => setStep(s => (parseInt(s,10)||0) + 1)}>+</button>
+            <button className="mu-step-pm" onClick={() => setFinalQty(s => String((parseInt(s,10)||0) + 1))}>+</button>
           </div>
-          <button className="mu-validate" onClick={handleValidate}>Valider</button>
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <button className="mu-cancel-btn" style={{flex:"0 0 auto"}} onClick={() => setPhase(myActive?.status === "paused" ? "paused" : "running")}>← Retour</button>
+            <button className="mu-validate" style={{flex:1}} onClick={handleValidate}>✅ Valider</button>
+          </div>
         </div>
       )}
     </div>
@@ -3491,7 +3583,7 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
     setLoading(true);
     setError("");
     try {
-      const url = `${APPS_SCRIPT_URL}?action=get-mu-list`;
+      const url = `${APPS_SCRIPT_URL}?action=get-mu-list&sheetId=${MU_SHEET_ID}&tab=${encodeURIComponent("UNIQUEMENT STOCK A REMPLIR PAR PDP ")}&typeCol=TYPE&activeCol=ACTIF+%3F&typeVal=MU`;
       const resp = await fetch(url);
       const data = await resp.json();
       if (!data.success) throw new Error(data.error || "Erreur de lecture de la feuille");
