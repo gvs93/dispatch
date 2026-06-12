@@ -506,6 +506,7 @@ const FIREBASE_CONFIG = {
 
 // URL Apps Script pour envoi du récap (Kelbongoo Distribution Proxy)
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj8BOPRY7V_Ni_0a-6YmNA-1HyRAcf0QXAL1FMy04Xnp1W4Am-cNuR4poQOHzu4VCL4Q/exec";
+const FL_PROXY_URL = "https://script.google.com/macros/s/AKfycbyVvvafumNfLZ7RzseUvoHaghPK7c-_7KqthgtV_VY9ulXe7sJIYEclWnratDbBJeDd/exec"; // proxy FL/Probon
 
 // === MU (Mise en unité) ===
 // Feuille FL lue côté serveur via le proxy Apps Script (action=get-mu-list).
@@ -3371,62 +3372,38 @@ function ModeChoiceScreen({ operator, onChoose, onOpenAdmin, onLogout }) {
 
 // Une carte produit MU
 function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
-  const [now, setNow]           = useState(Date.now());
-  // "idle"|"running"|"paused"|"finishing"
-  const [phase, setPhase]       = useState(myActive ? (myActive.status === "paused" ? "paused" : "running") : "idle");
-  const [inProgress, setInProgress] = useState(""); // quantité en cours (saisie mid-session)
-  const [finalQty, setFinalQty]  = useState("");    // quantité finale avant validation
+  const [phase, setPhase]        = useState(myActive ? (myActive.status === "paused" ? "paused" : "running") : "idle");
+  const [inProgress, setInProgress] = useState("");
+  const [finalQty,   setFinalQty]   = useState("");
 
-  // Sync phase si myActive change depuis Firebase (autre onglet / reload)
   useEffect(() => {
     if (!myActive) { setPhase("idle"); return; }
     setPhase(myActive.status === "paused" ? "paused" : "running");
     if (myActive.inProgress != null) setInProgress(String(myActive.inProgress));
   }, [myActive && myActive.id, myActive && myActive.status]);
 
-  // Chrono live en mode running
-  useEffect(() => {
-    if (phase !== "running") return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [phase]);
-
   const entRef = () => db.ref(`mu/${dateKey}/entries`);
 
-  /* ---- actions ---- */
   const handleStart = () => {
     if (!firebaseReady) { alert("Connexion impossible."); return; }
     entRef().push().set({
-      product:   item.produit || item.product,
-      target:    item.estimation || item.target || 0,
-      operator,
-      startedAt: Date.now(),
-      elapsedMs: 0,
-      inProgress: 0,
-      status:    "active"
+      product: item.produit || item.product,
+      target:  item.estimation || item.target || 0,
+      operator, startedAt: Date.now(), elapsedMs: 0, inProgress: 0, status: "active"
     });
   };
 
   const handlePause = () => {
     if (!myActive) return;
-    const elapsed = (myActive.elapsedMs || 0) + (Date.now() - myActive.startedAt);
-    // sauve quantité en cours si saisie
+    const elapsed = (myActive.elapsedMs || 0) + (Date.now() - (myActive.startedAt || Date.now()));
     const ip = parseInt(inProgress, 10) || myActive.inProgress || 0;
-    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({
-      status:     "paused",
-      elapsedMs:  elapsed,
-      pausedAt:   Date.now(),
-      inProgress: ip,
-    });
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ status: "paused", elapsedMs: elapsed, pausedAt: Date.now(), inProgress: ip });
     setPhase("paused");
   };
 
   const handleResume = () => {
     if (!myActive) return;
-    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({
-      status:    "active",
-      startedAt: Date.now(), // reset chrono depuis reprise
-    });
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ status: "active", startedAt: Date.now() });
     setPhase("running");
   };
 
@@ -3437,16 +3414,13 @@ function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
     setPhase("idle"); setInProgress(""); setFinalQty("");
   };
 
-  // Sauvegarde la quantité en cours (intermédiaire) sans terminer
   const saveInProgress = () => {
     if (!myActive) return;
     const v = parseInt(inProgress, 10);
-    if (isNaN(v) || v < 0) return;
-    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ inProgress: v });
+    if (!isNaN(v) && v >= 0) db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ inProgress: v });
   };
 
   const openFinish = () => {
-    // pré-remplit avec max(inProgress, doneCount déjà, target)
     const ip = parseInt(inProgress, 10) || myActive?.inProgress || 0;
     setFinalQty(String(Math.max(ip, item.estimation || item.target || 0)));
     setPhase("finishing");
@@ -3457,111 +3431,83 @@ function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
     const done = Math.max(0, parseInt(finalQty, 10) || 0);
     const finishedAt = Date.now();
     const elapsed = (myActive.elapsedMs || 0) + (phase !== "paused" ? finishedAt - (myActive.startedAt || finishedAt) : 0);
-    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({
-      status:     "done",
-      done,
-      finishedAt,
-      durationMs: elapsed,
-      inProgress: done,
-    });
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ status: "done", done, finishedAt, durationMs: elapsed, inProgress: done });
     setPhase("idle"); setInProgress(""); setFinalQty("");
   };
 
   const estimation = item.estimation || item.target || "—";
-  const elapsedDisplay = myActive
-    ? fmtClock((myActive.elapsedMs || 0) + (phase === "running" ? now - (myActive.startedAt || now) : 0))
-    : "0:00";
+  const ip = myActive?.inProgress || 0;
+  // progression % pour barre
+  const pct = estimation !== "—" && estimation > 0 ? Math.min(100, Math.round(((doneCount + ip) / estimation) * 100)) : 0;
 
   return (
     <div className={`mu-card ${phase !== "idle" ? "active" : ""} ${phase === "paused" ? "paused" : ""}`}>
       <div className="mu-name">{item.produit || item.product}</div>
-      <div style={{fontSize:11,color:"#888",marginBottom:4}}>{item.producer || ""}</div>
+      {item.uv && <div style={{fontSize:11,color:"#888",marginBottom:6}}>📏 {item.uv}</div>}
 
-      {item.uv && (
-        <div className="mu-fourchette">📏 {item.uv}</div>
+      {/* Barre de progression motivante */}
+      <div style={{background:"#e8f5e9",borderRadius:99,height:10,margin:"6px 0 10px",overflow:"hidden"}}>
+        <div style={{height:"100%",borderRadius:99,background: pct >= 100 ? "#2e7d32" : "#ef6c00",width: pct + "%",transition:"width 0.4s"}} />
+      </div>
+
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#666",marginBottom:8}}>
+        <span>🎯 à faire : <b>{estimation}</b></span>
+        {doneCount > 0 && <span style={{color:"#2e7d32"}}>✅ {doneCount} fait{doneCount>1?"s":""}</span>}
+      </div>
+
+      {!myActive && busyBy.length > 0 && (
+        <div style={{fontSize:12,color:"#888",marginBottom:6}}>🧑 {busyBy.join(", ")} est en train de préparer…</div>
       )}
 
-      {/* Cible = ESTIMATION MU DU JOUR */}
-      <div className="mu-target">
-        <span className="lbl">à faire (estimation)</span>
-        <span className="num" style={{color: estimation === "—" ? "#ccc" : undefined}}>{estimation}</span>
-      </div>
-
-      <div className="mu-sub">
-        {doneCount > 0 && <span className="done">✅ {doneCount} fait{doneCount > 1 ? "s" : ""} aujourd'hui</span>}
-        {!myActive && busyBy.length > 0 && (
-          <span className="mu-busy">🧑 {busyBy.join(", ")} en cours…</span>
-        )}
-      </div>
-
-      {/* ---- IDLE ---- */}
+      {/* IDLE */}
       {phase === "idle" && (
-        <button className="mu-start" onClick={handleStart}>▶ Commencer</button>
+        <button className="mu-start" onClick={handleStart}>▶ Je commence !</button>
       )}
 
-      {/* ---- RUNNING ---- */}
+      {/* RUNNING */}
       {phase === "running" && (
         <div className="mu-running">
-          <div className="clock">{elapsedDisplay}</div>
-          <div className="since">démarré à {fmtTime(myActive.startedAt)}</div>
-
-          {/* Quantité en cours (intermédiaire) */}
-          <div style={{margin:"8px 0",display:"flex",alignItems:"center",gap:6,justifyContent:"center"}}>
-            <span style={{fontSize:12,color:"#666"}}>En cours :</span>
-            <input
-              type="number" inputMode="numeric"
-              value={inProgress}
-              onChange={e => setInProgress(e.target.value)}
-              onBlur={saveInProgress}
+          <div style={{fontSize:13,color:"#ef6c00",fontWeight:700,marginBottom:8}}>🏃 En cours…</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center",marginBottom:10}}>
+            <span style={{fontSize:13,color:"#555"}}>Sachets prêts :</span>
+            <input type="number" inputMode="numeric" value={inProgress}
+              onChange={e => setInProgress(e.target.value)} onBlur={saveInProgress}
               placeholder="0"
-              style={{width:60,textAlign:"center",fontSize:15,padding:"4px",borderRadius:6,border:"1px solid #ccc"}}
-            />
-            <span style={{fontSize:12,color:"#666"}}>sachets</span>
+              style={{width:64,textAlign:"center",fontSize:18,fontWeight:700,padding:"5px",borderRadius:8,border:"2px solid #ef6c00"}} />
           </div>
-
           <div className="btns" style={{gap:8}}>
             <button className="mu-cancel-btn" onClick={handleCancel} title="Annuler">✕</button>
-            <button className="mu-pause-btn" onClick={handlePause} title="Pause">⏸ Pause</button>
-            <button className="mu-done-btn" onClick={openFinish}>✓ Terminé</button>
+            <button className="mu-pause-btn" onClick={handlePause}>⏸ Pause</button>
+            <button className="mu-done-btn" onClick={openFinish}>✓ Terminé !</button>
           </div>
         </div>
       )}
 
-      {/* ---- PAUSED ---- */}
+      {/* PAUSED */}
       {phase === "paused" && (
-        <div className="mu-running" style={{background:"#fff8e1"}}>
-          <div className="clock" style={{color:"#f59e0b"}}>⏸ {elapsedDisplay}</div>
-          <div className="since" style={{color:"#a07000"}}>
-            En cours : {myActive?.inProgress || 0} sachet{(myActive?.inProgress||0) > 1 ? "s" : ""}
-          </div>
-          <div className="btns" style={{gap:8,marginTop:8}}>
-            <button className="mu-cancel-btn" onClick={handleCancel} title="Annuler">✕</button>
-            <button className="mu-start" style={{flex:1}} onClick={handleResume}>▶ Reprendre</button>
-            <button className="mu-done-btn" onClick={openFinish}>✓ Terminé</button>
+        <div className="mu-running" style={{background:"#fff8e1",borderRadius:8,padding:"10px 0 4px"}}>
+          <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:6}}>⏸ En pause — {ip} sachet{ip>1?"s":""} prêts</div>
+          <div className="btns" style={{gap:8}}>
+            <button className="mu-cancel-btn" onClick={handleCancel}>✕</button>
+            <button className="mu-start" style={{flex:1}} onClick={handleResume}>▶ Je reprends !</button>
+            <button className="mu-done-btn" onClick={openFinish}>✓ Terminé !</button>
           </div>
         </div>
       )}
 
-      {/* ---- FINISHING : saisie quantité totale ---- */}
+      {/* FINISHING */}
       {phase === "finishing" && (
         <div className="mu-stepper">
-          <div className="q">Quantité totale faite&nbsp;?</div>
-          <div style={{fontSize:12,color:"#888",marginBottom:6}}>
-            (estimation : {estimation} · en cours : {myActive?.inProgress || 0})
-          </div>
+          <div className="q" style={{marginBottom:4}}>🎉 Combien de sachets au total ?</div>
+          <div style={{fontSize:12,color:"#888",marginBottom:8}}>Estimation : {estimation} · en cours : {ip}</div>
           <div className="row">
-            <button className="mu-step-pm" onClick={() => setFinalQty(s => String(Math.max(0, (parseInt(s,10)||0) - 1)))}>−</button>
-            <input
-              className="mu-step-val"
-              type="number" inputMode="numeric"
-              value={finalQty}
-              onChange={e => setFinalQty(e.target.value)}
-              onFocus={e => e.target.select()}
-            />
-            <button className="mu-step-pm" onClick={() => setFinalQty(s => String((parseInt(s,10)||0) + 1))}>+</button>
+            <button className="mu-step-pm" onClick={() => setFinalQty(s => String(Math.max(0,(parseInt(s,10)||0)-1)))}>−</button>
+            <input className="mu-step-val" type="number" inputMode="numeric"
+              value={finalQty} onChange={e => setFinalQty(e.target.value)} onFocus={e => e.target.select()} />
+            <button className="mu-step-pm" onClick={() => setFinalQty(s => String((parseInt(s,10)||0)+1))}>+</button>
           </div>
           <div style={{display:"flex",gap:8,marginTop:8}}>
-            <button className="mu-cancel-btn" style={{flex:"0 0 auto"}} onClick={() => setPhase(myActive?.status === "paused" ? "paused" : "running")}>← Retour</button>
+            <button className="mu-cancel-btn" style={{flex:"0 0 auto"}} onClick={() => setPhase(myActive?.status==="paused"?"paused":"running")}>← Retour</button>
             <button className="mu-validate" style={{flex:1}} onClick={handleValidate}>✅ Valider</button>
           </div>
         </div>
@@ -3569,6 +3515,7 @@ function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
     </div>
   );
 }
+
 
 function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
   const [items, setItems] = useState([]);
@@ -3583,7 +3530,7 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
     setLoading(true);
     setError("");
     try {
-      const url = `${APPS_SCRIPT_URL}?action=get-mu-list&sheetId=${MU_SHEET_ID}&tab=${encodeURIComponent("UNIQUEMENT STOCK A REMPLIR PAR PDP ")}&typeCol=TYPE&activeCol=ACTIF+%3F&typeVal=MU`;
+      const url = `${FL_PROXY_URL}?action=get-mu-list&sheetId=${MU_SHEET_ID}&tab=${encodeURIComponent("UNIQUEMENT STOCK A REMPLIR PAR PDP ")}&typeCol=TYPE&activeCol=ACTIF+%3F&typeVal=MU`;
       const resp = await fetch(url);
       const data = await resp.json();
       if (!data.success) throw new Error(data.error || "Erreur de lecture de la feuille");
@@ -3602,6 +3549,9 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
   useEffect(() => { loadList(); }, [loadList]);
 
   // Abonnement temps réel aux entrées MU du jour
+  const mailSentRef = React.useRef(false); // évite double envoi dans la journée
+  useEffect(() => { mailSentRef.current = false; }, [dateKey]); // reset chaque jour
+
   useEffect(() => {
     if (!firebaseReady) return;
     const ref = db.ref(`mu/${dateKey}/entries`);
@@ -3614,6 +3564,40 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
     ref.on("value", handler);
     return () => ref.off("value", handler);
   }, [dateKey]);
+
+  // Envoi automatique du récap quand TOUS les produits MU sont terminés
+  useEffect(() => {
+    if (mailSentRef.current) return;
+    if (!items.length) return;
+    const vals = Object.values(entries);
+    // Un produit est "terminé" si au moins une entrée done existe pour lui
+    const doneProducts = new Set(vals.filter(e => e.status === "done").map(e => e.product));
+    const allDone = items.every(it => doneProducts.has(it.produit || it.product));
+    if (!allDone) return;
+    mailSentRef.current = true;
+    // Calcule le récap
+    const doneEntries = vals.filter(e => e.status === "done");
+    const byOp = {}, byProd = {};
+    doneEntries.forEach(e => {
+      if (!byOp[e.operator]) byOp[e.operator] = { sachets:0, durationMs:0, produits:[] };
+      byOp[e.operator].sachets    += e.done || 0;
+      byOp[e.operator].durationMs += e.durationMs || 0;
+      byOp[e.operator].produits.push(e.product);
+      if (!byProd[e.product]) byProd[e.product] = { target: e.target||0, done:0, operators:[] };
+      byProd[e.product].done += e.done || 0;
+      if (!byProd[e.product].operators.includes(e.operator)) byProd[e.product].operators.push(e.operator);
+    });
+    const byOperator = Object.entries(byOp).map(([name,v]) => ({
+      name, ...v, cadence: v.durationMs > 0 ? (v.sachets/(v.durationMs/3600000)).toFixed(0) : "-"
+    }));
+    const byProduct  = Object.entries(byProd).map(([product,v]) => ({ product, ...v }));
+    const total      = doneEntries.reduce((s,e) => s + (e.done||0), 0);
+    const durationMs = doneEntries.reduce((s,e) => s + (e.durationMs||0), 0);
+    fetch(FL_PROXY_URL, { method:"POST", body: JSON.stringify({
+      secret: FRESHDESK_SECRET, action: "mail_mu_recap",
+      day: dateKey, total, durationMs, byOperator, byProduct, entries: doneEntries
+    }) }).catch(() => {}); // silencieux — on ne bloque pas l'UI
+  }, [entries, items]);
 
   // Index par produit : compteurs faits + qui est en cours + ma session active
   const byProduct = useMemo(() => {
@@ -3730,167 +3714,184 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
    ========================================================================= */
 
 function MuAdminTab() {
-  const [allDays, setAllDays] = useState({}); // { dateKey: { entries } }
-  const [loading, setLoading] = useState(true);
+  const [allDays, setAllDays]   = useState({});
+  const [loading, setLoading]   = useState(true);
   const [selectedDay, setSelectedDay] = useState("");
+  const [sending, setSending]   = useState(false);
+  const [mailSent, setMailSent] = useState({});
 
   useEffect(() => {
     if (!firebaseReady) { setLoading(false); return; }
     const ref = db.ref("mu");
-    const handler = (snap) => {
-      const all = snap.val() || {};
-      setAllDays(all);
-      setLoading(false);
-    };
+    const handler = (snap) => { setAllDays(snap.val() || {}); setLoading(false); };
     ref.on("value", handler);
     return () => ref.off("value", handler);
   }, []);
 
-  const dayKeys = useMemo(
-    () => Object.keys(allDays).sort((a, b) => (a < b ? 1 : -1)),
-    [allDays]
-  );
+  const dayKeys = useMemo(() => Object.keys(allDays).sort((a,b) => a<b?1:-1), [allDays]);
+  useEffect(() => { if (!selectedDay && dayKeys.length > 0) setSelectedDay(dayKeys[0]); }, [dayKeys, selectedDay]);
 
-  // Sélectionne le jour le plus récent par défaut
-  useEffect(() => {
-    if (!selectedDay && dayKeys.length > 0) setSelectedDay(dayKeys[0]);
-  }, [dayKeys, selectedDay]);
-
-  // Entrées "done" du jour sélectionné
-  const dayEntries = useMemo(() => {
+  const allEntries = useMemo(() => {
     const d = allDays[selectedDay];
     if (!d || !d.entries) return [];
-    return Object.values(d.entries)
-      .filter(e => e && e.status === "done")
-      .sort((a, b) => (b.finishedAt || 0) - (a.finishedAt || 0));
+    return Object.entries(d.entries)
+      .filter(([,e]) => e)
+      .map(([id, e]) => ({ id, ...e }))
+      .sort((a,b) => (a.startedAt||0) - (b.startedAt||0));
   }, [allDays, selectedDay]);
 
-  // Recap par opérateur
+  const doneEntries = useMemo(() => allEntries.filter(e => e.status === "done"), [allEntries]);
+
   const byOperator = useMemo(() => {
     const m = {};
-    dayEntries.forEach(e => {
-      if (!m[e.operator]) m[e.operator] = { sachets: 0, durationMs: 0, count: 0 };
-      m[e.operator].sachets += (e.done || 0);
-      m[e.operator].durationMs += (e.durationMs || 0);
-      m[e.operator].count += 1;
+    doneEntries.forEach(e => {
+      if (!m[e.operator]) m[e.operator] = { sachets:0, durationMs:0, produits:[] };
+      m[e.operator].sachets    += e.done || 0;
+      m[e.operator].durationMs += e.durationMs || 0;
+      m[e.operator].produits.push(e.product);
     });
-    return Object.entries(m)
-      .map(([name, v]) => ({
-        name,
-        ...v,
-        cadence: v.durationMs > 0 ? (v.sachets / (v.durationMs / 3600000)) : 0 // sachets / h
-      }))
-      .sort((a, b) => b.sachets - a.sachets);
-  }, [dayEntries]);
+    return Object.entries(m).map(([name,v]) => ({
+      name, ...v,
+      cadence: v.durationMs > 0 ? (v.sachets / (v.durationMs / 3600000)).toFixed(0) : "—",
+    })).sort((a,b) => b.sachets - a.sachets);
+  }, [doneEntries]);
 
-  // Recap par produit (cible vs fait)
   const byProduct = useMemo(() => {
     const m = {};
-    dayEntries.forEach(e => {
-      if (!m[e.product]) m[e.product] = { target: e.target || 0, done: 0 };
-      m[e.product].done += (e.done || 0);
-      // garde la cible max rencontrée
-      if ((e.target || 0) > m[e.product].target) m[e.product].target = e.target || 0;
+    doneEntries.forEach(e => {
+      if (!m[e.product]) m[e.product] = { target: e.target||0, done:0, operators:[] };
+      m[e.product].done += e.done || 0;
+      if (!m[e.product].operators.includes(e.operator)) m[e.product].operators.push(e.operator);
+      if ((e.target||0) > m[e.product].target) m[e.product].target = e.target||0;
     });
-    return Object.entries(m)
-      .map(([product, v]) => ({ product, ...v }))
-      .sort((a, b) => b.done - a.done);
-  }, [dayEntries]);
+    return Object.entries(m).map(([product,v]) => ({ product, ...v })).sort((a,b) => b.done - a.done);
+  }, [doneEntries]);
 
-  const dayTotal = useMemo(
-    () => dayEntries.reduce((s, e) => s + (e.done || 0), 0),
-    [dayEntries]
-  );
+  const dayTotal = useMemo(() => doneEntries.reduce((s,e) => s + (e.done||0), 0), [doneEntries]);
+  const dayDurationMs = useMemo(() => doneEntries.reduce((s,e) => s + (e.durationMs||0), 0), [doneEntries]);
 
-  if (loading) return <div style={{textAlign: "center", padding: 40, color: "#999"}}>Chargement…</div>;
+  const sendMailRecap = async () => {
+    if (!selectedDay) return;
+    setSending(true);
+    try {
+      const payload = {
+        secret: typeof FRESHDESK_SECRET !== "undefined" ? FRESHDESK_SECRET : "Lesmailspartent!",
+        action: "mail_mu_recap",
+        day: selectedDay,
+        total: dayTotal,
+        durationMs: dayDurationMs,
+        byOperator,
+        byProduct,
+        entries: doneEntries,
+      };
+      const res = await fetch(FL_PROXY_URL, { method:"POST", body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "erreur proxy");
+      setMailSent(prev => ({ ...prev, [selectedDay]: true }));
+      alert("✉️ Récap envoyé à hg@probon.fr");
+    } catch(e) {
+      alert("Erreur envoi mail : " + e.message);
+    } finally {
+      setSending(false);
+    }
+  };
 
-  if (dayKeys.length === 0) {
-    return <div style={{textAlign: "center", padding: 40, color: "#999"}}>Aucune mise en unité enregistrée pour l'instant.</div>;
-  }
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"#999"}}>Chargement…</div>;
+  if (dayKeys.length === 0) return <div style={{textAlign:"center",padding:40,color:"#999"}}>Aucune mise en unité enregistrée.</div>;
 
   return (
     <div>
-      {/* Sélecteur de jour */}
-      <div style={{marginBottom: 12, overflowX: "auto", display: "flex", gap: 6, paddingBottom: 4}}>
+      {/* Sélecteur jour */}
+      <div style={{marginBottom:12,overflowX:"auto",display:"flex",gap:6,paddingBottom:4}}>
         {dayKeys.map(k => (
-          <button
-            key={k}
-            onClick={() => setSelectedDay(k)}
-            style={{
-              flex: "0 0 auto", padding: "8px 12px", borderRadius: 8, fontSize: 13, fontWeight: 700,
-              background: selectedDay === k ? "#ef6c00" : "#f0f0f0",
-              color: selectedDay === k ? "#fff" : "#555"
-            }}
-          >
-            {fmtDateKey(k)}
-          </button>
+          <button key={k} onClick={() => setSelectedDay(k)} style={{
+            flex:"0 0 auto",padding:"8px 12px",borderRadius:8,fontSize:13,fontWeight:700,
+            background: selectedDay===k ? "#ef6c00":"#f0f0f0", color: selectedDay===k?"#fff":"#555",border:"none",cursor:"pointer"
+          }}>{fmtDateKey(k)}</button>
         ))}
       </div>
 
+      {/* KPIs */}
       <div className="recap-card">
-        <h3>🥕 {fmtDateKey(selectedDay)}</h3>
-        <div className="recap-stat">
-          <span className="label">Total sachets faits</span>
-          <span className="value">{dayTotal}</span>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <h3 style={{margin:0}}>🥕 {fmtDateKey(selectedDay)}</h3>
+          <button onClick={sendMailRecap} disabled={sending} style={{
+            padding:"7px 14px",borderRadius:8,border:"none",background: mailSent[selectedDay]?"#2e7d32":"#ef6c00",
+            color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"
+          }}>{sending ? "Envoi…" : mailSent[selectedDay] ? "✓ Envoyé" : "✉️ Envoyer récap"}</button>
         </div>
-        <div className="recap-stat">
-          <span className="label">Préparateurs</span>
-          <span className="value">{byOperator.length}</span>
-        </div>
-        <div className="recap-stat">
-          <span className="label">Produits traités</span>
-          <span className="value">{byProduct.length}</span>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+          {[
+            ["Sachets faits", dayTotal],
+            ["Préparateurs", byOperator.length],
+            ["Produits traités", byProduct.length],
+            ["Durée totale", fmtDuration(dayDurationMs)],
+          ].map(([lbl,val]) => (
+            <div key={lbl} style={{flex:"1 1 100px",background:"#fff8f0",borderRadius:8,padding:"8px 12px",textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:800,color:"#ef6c00"}}>{val}</div>
+              <div style={{fontSize:11,color:"#888"}}>{lbl}</div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Recap par nom */}
+      {/* Par préparateur */}
       <div className="recap-card">
         <h3>👤 Par préparateur</h3>
-        {byOperator.length === 0 && <div style={{color:"#999", fontSize:13}}>Aucune donnée.</div>}
+        {byOperator.length === 0 && <div style={{color:"#999",fontSize:13}}>Aucune donnée.</div>}
         {byOperator.map(o => (
-          <div className="recap-stat" key={o.name}>
-            <span className="label">
-              <strong>{o.name}</strong>
-              <span style={{color:"#999", marginLeft:6, fontSize:11}}>
-                {fmtDuration(o.durationMs)} • {o.cadence.toFixed(0)} sachets/h
-              </span>
-            </span>
-            <span className="value">{o.sachets} sachets</span>
+          <div key={o.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f0f0f0"}}>
+            <div>
+              <div style={{fontWeight:700}}>{o.name}</div>
+              <div style={{fontSize:11,color:"#999"}}>{fmtDuration(o.durationMs)} · {o.cadence} sachets/h · {o.produits.length} produit{o.produits.length>1?"s":""}</div>
+            </div>
+            <div style={{fontSize:22,fontWeight:800,color:"#ef6c00"}}>{o.sachets}</div>
           </div>
         ))}
       </div>
 
-      {/* Recap par produit */}
+      {/* Par produit */}
       <div className="recap-card">
-        <h3>📦 Par produit (estimé / fait)</h3>
-        {byProduct.map(p => (
-          <div className="recap-stat" key={p.product}>
-            <span className="label">{p.product}</span>
-            <span className="value">
-              <span style={{color:"#999", fontWeight:600}}>{p.target} →</span> {p.done}
-            </span>
-          </div>
-        ))}
+        <h3>📦 Par produit</h3>
+        {byProduct.map(p => {
+          const pct = p.target > 0 ? Math.min(100, Math.round((p.done/p.target)*100)) : 100;
+          return (
+            <div key={p.product} style={{marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
+                <span style={{fontWeight:600}}>{p.product}</span>
+                <span style={{color: p.done >= p.target ? "#2e7d32":"#ef6c00",fontWeight:700}}>
+                  {p.done} <span style={{color:"#bbb",fontWeight:400}}>/ {p.target} est.</span>
+                </span>
+              </div>
+              <div style={{background:"#eee",borderRadius:99,height:6,marginTop:3}}>
+                <div style={{height:"100%",borderRadius:99,background:p.done>=p.target?"#2e7d32":"#ef6c00",width:pct+"%"}} />
+              </div>
+              <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{p.operators.join(", ")}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Historique détaillé */}
       <div className="recap-card">
         <h3>🕓 Historique détaillé</h3>
-        {dayEntries.map((e, i) => (
-          <div className="recap-stat" key={i} style={{flexWrap:"wrap"}}>
-            <span className="label" style={{flex:"1 1 60%"}}>
-              <strong>{e.product}</strong> — {e.operator}
-              <div style={{fontSize:11, color:"#999"}}>
-                {fmtTime(e.startedAt)} → {fmtTime(e.finishedAt)} • {fmtDuration(e.durationMs || 0)}
+        {doneEntries.map((e,i) => (
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:13}}>{e.product}</div>
+              <div style={{fontSize:11,color:"#999"}}>
+                {e.operator} · {fmtTime(e.startedAt)} → {fmtTime(e.finishedAt)} · {fmtDuration(e.durationMs||0)}
+                {e.inProgress != null && e.inProgress !== e.done ? <span> · en cours renseigné : {e.inProgress}</span> : ""}
               </div>
-            </span>
-            <span className="value">{e.done} <span style={{color:"#999", fontWeight:600, fontSize:11}}>/ {e.target} est.</span></span>
+            </div>
+            <div style={{fontWeight:800,fontSize:18,color:"#ef6c00",marginLeft:8}}>{e.done}</div>
           </div>
         ))}
       </div>
     </div>
   );
 }
+
 
 /* =========================================================================
    APP ROOT
