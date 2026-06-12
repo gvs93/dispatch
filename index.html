@@ -3608,19 +3608,27 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
   // Index par produit : compteurs faits + qui est en cours + ma session active
   const byProduct = useMemo(() => {
     const idx = {};
+    // Passe 1 : pour chaque produit, garder la dernière entrée done (finishedAt le plus grand)
+    // et l'entrée active/paused en cours pour l'opérateur courant.
     Object.values(entries).forEach(e => {
       const p = e.product;
-      if (!idx[p]) idx[p] = { done: 0, doneCount: 0, busy: [], mine: null };
+      if (!p) return;
+      if (!idx[p]) idx[p] = { lastDone: null, doneCount: 0, busy: [], mine: null };
       if (e.status === "done") {
-        idx[p].doneCount += (e.done || 0);
-      } else if (e.status === "active") {
+        // Ne garder que la plus récente (évite les cumuls sur doublons Firebase)
+        if (!idx[p].lastDone || (e.finishedAt || 0) > (idx[p].lastDone.finishedAt || 0))
+          idx[p].lastDone = e;
+      } else if (e.status === "active" || e.status === "paused") {
         if (e.operator === operator) {
-          // garde la plus récente
-          if (!idx[p].mine || e.startedAt > idx[p].mine.startedAt) idx[p].mine = e;
+          if (!idx[p].mine || (e.startedAt || 0) > (idx[p].mine.startedAt || 0)) idx[p].mine = e;
         } else if (!idx[p].busy.includes(e.operator)) {
           idx[p].busy.push(e.operator);
         }
       }
+    });
+    // Passe 2 : extraire doneCount depuis lastDone uniquement
+    Object.values(idx).forEach(v => {
+      v.doneCount = v.lastDone ? (v.lastDone.done || 0) : 0;
     });
     return idx;
   }, [entries, operator]);
@@ -3649,10 +3657,16 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
   const addExtra = (it) => setExtraAdded(prev => ({ ...prev, [it.produit||it.product]: it }));
 
   const filtered = useMemo(() => {
-    const base = plannedItems;
+    const base = plannedItems.filter(it => {
+      const key = it.produit || it.product;
+      const info = byProduct[key] || {};
+      // Masque si done et doneCount >= estimation (terminé)
+      if (info.lastDone && info.doneCount >= (it.estimation || it.target || 0) && (it.estimation || it.target || 0) > 0) return false;
+      return true;
+    });
     const q = search.trim() ? stripAccents(search.toLowerCase()) : null;
     return q ? base.filter(it => stripAccents((it.produit||it.product||"").toLowerCase()).includes(q)) : base;
-  }, [plannedItems, search]);
+  }, [plannedItems, byProduct, search]);
 
   const filteredExtra = useMemo(() => {
     const pool = extraPool.filter(it => !(it.produit||it.product in extraAdded));
@@ -3682,7 +3696,7 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
         <div className="header-row">
           <div>
             <h1>🥕 Mise en unité</h1>
-            <div className="sub">{operator} • {fmtDateKey(dateKey)}</div>
+            <div className="sub">{fmtDateKey(dateKey)}</div>
           </div>
           <div className="header-actions">
             {isAdmin(operator) && (
@@ -3691,6 +3705,18 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
             <button className="header-btn" onClick={onBack}>← Mode</button>
           </div>
         </div>
+      </div>
+      {/* Bandeau nom en gros */}
+      <div style={{background:"#fff8f0",borderBottom:"2px solid #ef6c00",padding:"10px 14px",
+        display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+        <div>
+          <div style={{fontSize:11,color:"#aaa",marginBottom:1}}>Préparateur actif</div>
+          <div style={{fontSize:22,fontWeight:900,color:"#ef6c00",letterSpacing:"-0.5px"}}>{operator}</div>
+        </div>
+        <button onClick={onBack} style={{padding:"8px 14px",borderRadius:10,border:"2px solid #ef6c00",
+          background:"#fff",color:"#ef6c00",fontWeight:700,fontSize:12,cursor:"pointer",flexShrink:0}}>
+          👤 Ce n'est pas moi
+        </button>
       </div>
 
       <div className="mu-topbar">
