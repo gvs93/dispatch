@@ -3572,7 +3572,8 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
     const vals = Object.values(entries);
     // Un produit est "terminé" si au moins une entrée done existe pour lui
     const doneProducts = new Set(vals.filter(e => e.status === "done").map(e => e.product));
-    const allDone = items.every(it => doneProducts.has(it.produit || it.product));
+    const planned = items.filter(it => it.estimation != null && it.estimation > 0);
+    const allDone = planned.length > 0 && planned.every(it => doneProducts.has(it.produit || it.product));
     if (!allDone) return;
     mailSentRef.current = true;
     // Calcule le récap
@@ -3631,11 +3632,44 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
     return { all, mine };
   }, [entries, operator]);
 
+  // Produits avec estimation = planifies ; sans estimation = dispo pour MU suppl
+  const plannedItems = useMemo(() => items.filter(it => it.estimation != null && it.estimation > 0), [items]);
+  const extraPool    = useMemo(() => items.filter(it => !it.estimation || it.estimation <= 0), [items]);
+
+  // allFlItems = tous les produits FL actifs (planifies + extra pool) pour MU non prevues
+  // + produits FL inactifs non presentes dans items (pas de type MU) — on les charge separement
+  const [showExtra, setShowExtra] = useState(false);
+  const [extraAdded, setExtraAdded] = useState({}); // key -> item
+
+  const addExtra = (it) => setExtraAdded(prev => ({ ...prev, [it.produit||it.product]: it }));
+
   const filtered = useMemo(() => {
-    if (!search.trim()) return items;
-    const q = stripAccents(search.toLowerCase());
-    return items.filter(it => stripAccents((it.product || "").toLowerCase()).includes(q));
-  }, [items, search]);
+    const base = plannedItems;
+    const q = search.trim() ? stripAccents(search.toLowerCase()) : null;
+    return q ? base.filter(it => stripAccents((it.produit||it.product||"").toLowerCase()).includes(q)) : base;
+  }, [plannedItems, search]);
+
+  const filteredExtra = useMemo(() => {
+    const pool = extraPool.filter(it => !(it.produit||it.product in extraAdded));
+    const q = search.trim() ? stripAccents(search.toLowerCase()) : null;
+    return q ? pool.filter(it => stripAccents((it.produit||it.product||"").toLowerCase()).includes(q)) : pool;
+  }, [extraPool, extraAdded, search]);
+
+  const renderCard = (it, idx) => {
+    const key = it.produit || it.product;
+    const info = byProduct[key] || byProduct[it.product] || { doneCount: 0, busy: [], mine: null };
+    return (
+      <MuCard
+        key={`${key}_${idx}`}
+        item={it}
+        operator={operator}
+        dateKey={dateKey}
+        myActive={info.mine}
+        doneCount={info.doneCount}
+        busyBy={info.busy}
+      />
+    );
+  };
 
   return (
     <div className="app">
@@ -3672,26 +3706,66 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
         </div>
       )}
 
-      {!loading && !error && filtered.length === 0 && (
-        <div style={{textAlign: "center", padding: 40, color: "#999"}}>Aucun produit ne correspond.</div>
+      {!loading && !error && filtered.length === 0 && plannedItems.length === 0 && (
+        <div style={{textAlign: "center", padding: 40, color: "#999"}}>Aucun produit planifié pour aujourd'hui.</div>
       )}
 
+      {/* Liste principale : produits AVEC estimation */}
       {!loading && filtered.length > 0 && (
         <div className="mu-grid">
-          {filtered.map((it, idx) => {
-            const info = byProduct[it.product] || { doneCount: 0, busy: [], mine: null };
-            return (
-              <MuCard
-                key={`${it.product}_${idx}`}
-                item={it}
-                operator={operator}
-                dateKey={dateKey}
-                myActive={info.mine}
-                doneCount={info.doneCount}
-                busyBy={info.busy}
-              />
-            );
-          })}
+          {filtered.map(renderCard)}
+        </div>
+      )}
+
+      {/* MU non prévues : produits sans estimation + extra ajoutés */}
+      {!loading && (
+        <div style={{margin: "12px 14px 0"}}>
+          <button
+            onClick={() => setShowExtra(s => !s)}
+            style={{width:"100%", padding:"12px 16px", borderRadius:10, border:"2px dashed #ef6c00",
+              background: showExtra ? "#fff8f0":"#fff", color:"#ef6c00", fontWeight:700, fontSize:14, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"space-between"}}
+          >
+            <span>➕ MU non prévues {extraPool.length > 0 ? `(${extraPool.length} produits dispo)` : ""}</span>
+            <span>{showExtra ? "▲" : "▼"}</span>
+          </button>
+
+          {showExtra && (
+            <div style={{marginTop:10}}>
+              <p style={{fontSize:12, color:"#888", margin:"0 0 8px"}}>
+                Ces produits n'ont pas d'estimation aujourd'hui. Ajoute-les si tu dois faire de la MU supplémentaire.
+              </p>
+
+              {/* Produits extra déjà ajoutés */}
+              {Object.keys(extraAdded).length > 0 && (
+                <div className="mu-grid" style={{marginBottom:12}}>
+                  {Object.values(extraAdded).map((it, idx) => renderCard(it, 1000+idx))}
+                </div>
+              )}
+
+              {/* Pool de produits disponibles à ajouter */}
+              {filteredExtra.map(it => {
+                const key = it.produit || it.product;
+                return (
+                  <div key={key} style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+                    padding:"8px 12px", marginBottom:6, borderRadius:8, border:"1px solid #eee", background:"#fafafa"}}>
+                    <div>
+                      <div style={{fontWeight:600, fontSize:13}}>{key}</div>
+                      {it.uv && <div style={{fontSize:11, color:"#999"}}>{it.uv}</div>}
+                    </div>
+                    <button onClick={() => addExtra(it)}
+                      style={{padding:"6px 14px", borderRadius:8, border:"none", background:"#ef6c00",
+                        color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer"}}>
+                      + Ajouter
+                    </button>
+                  </div>
+                );
+              })}
+              {filteredExtra.length === 0 && Object.keys(extraAdded).length === extraPool.length && (
+                <div style={{fontSize:12, color:"#bbb", textAlign:"center", padding:8}}>Tous les produits disponibles ont été ajoutés.</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
