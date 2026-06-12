@@ -3377,10 +3377,13 @@ function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
   const [finalQty,   setFinalQty]   = useState("");
 
   useEffect(() => {
-    if (!myActive) { setPhase("idle"); return; }
-    setPhase(myActive.status === "paused" ? "paused" : "running");
-    if (myActive.inProgress != null) setInProgress(String(myActive.inProgress));
-  }, [myActive && myActive.id, myActive && myActive.status]);
+    if (!myActive) { setPhase("idle"); setInProgress(""); return; }
+    const p = myActive.status === "paused" ? "paused" : "running";
+    setPhase(p);
+    // Toujours resynchroniser inProgress depuis Firebase (survit au reload/resume)
+    if (myActive.inProgress != null && myActive.inProgress !== 0)
+      setInProgress(String(myActive.inProgress));
+  }, [myActive && myActive.id, myActive && myActive.status, myActive && myActive.inProgress]);
 
   const entRef = () => db.ref(`mu/${dateKey}/entries`);
 
@@ -3405,6 +3408,8 @@ function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
     if (!myActive) return;
     db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ status: "active", startedAt: Date.now() });
     setPhase("running");
+    // Restaure la quantité en cours depuis Firebase
+    if (myActive.inProgress != null) setInProgress(String(myActive.inProgress));
   };
 
   const handleCancel = () => {
@@ -3697,6 +3702,46 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
         />
         <button className="mu-refresh" onClick={loadList}>↻</button>
       </div>
+
+      {/* ── Barre de progression globale ── */}
+      {!loading && !error && (() => {
+        const totalEst  = plannedItems.reduce((s, it) => s + (it.estimation || 0), 0);
+        const totalDone = Object.values(entries)
+          .filter(e => e.status === "done")
+          .reduce((s, e) => s + (e.done || 0), 0);
+        const totalIP   = Object.values(entries)
+          .filter(e => e.status === "active" || e.status === "paused")
+          .reduce((s, e) => s + (e.inProgress || 0), 0);
+        const nbDone    = plannedItems.filter(it => {
+          const key = it.produit || it.product;
+          return Object.values(entries).some(e => e.status === "done" && (e.product === key));
+        }).length;
+        const pctDone   = totalEst > 0 ? Math.min(100, Math.round((totalDone / totalEst) * 100)) : 0;
+        const pctIP     = totalEst > 0 ? Math.min(100 - pctDone, Math.round((totalIP  / totalEst) * 100)) : 0;
+        const allFinished = nbDone === plannedItems.length && plannedItems.length > 0;
+        return (
+          <div style={{margin: "0 14px 4px", background:"#fff", borderRadius:14, padding:"12px 14px",
+            boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+            {/* Barre combinée : fait (vert) + en cours (orange) */}
+            <div style={{background:"#eee", borderRadius:99, height:14, overflow:"hidden", marginBottom:8, position:"relative"}}>
+              <div style={{position:"absolute", left:0, top:0, height:"100%", borderRadius:99,
+                background:"#2e7d32", width:pctDone+"%", transition:"width 0.5s"}} />
+              <div style={{position:"absolute", left:pctDone+"%", top:0, height:"100%",
+                background:"#ef6c00", width:pctIP+"%", transition:"width 0.5s", opacity:0.7}} />
+            </div>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:6}}>
+              <div style={{display:"flex", gap:12, fontSize:13}}>
+                <span>🎯 <b>{totalEst}</b> <span style={{color:"#aaa"}}>à faire</span></span>
+                <span style={{color:"#2e7d32"}}>✅ <b>{totalDone}</b> faits</span>
+                {totalIP > 0 && <span style={{color:"#ef6c00"}}>🏃 <b>{totalIP}</b> en cours</span>}
+              </div>
+              <div style={{fontSize:12, color: allFinished ? "#2e7d32":"#888", fontWeight: allFinished?700:400}}>
+                {allFinished ? "🎉 Tout est fait !" : `${nbDone}/${plannedItems.length} produits terminés`}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {loading && <div style={{textAlign: "center", padding: 40, color: "#999"}}>Chargement de la liste…</div>}
 
