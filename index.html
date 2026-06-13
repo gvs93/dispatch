@@ -3660,8 +3660,10 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
     const base = plannedItems.filter(it => {
       const key = it.produit || it.product;
       const info = byProduct[key] || {};
-      // Masque si done et doneCount >= estimation (terminé)
-      if (info.lastDone && info.doneCount >= (it.estimation || it.target || 0) && (it.estimation || it.target || 0) > 0) return false;
+      // Dès qu'un produit est VALIDÉ (au moins une entrée « done »), il disparaît de la page
+      // et ne revient plus — même si la quantité faite est sous l'estimation.
+      // L'historique reste consultable dans le récap (onglet MU master + mail récap).
+      if (info.lastDone) return false;
       return true;
     });
     const q = search.trim() ? stripAccents(search.toLowerCase()) : null;
@@ -3807,10 +3809,12 @@ function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
                 Ces produits n'ont pas d'estimation aujourd'hui. Ajoute-les si tu dois faire de la MU supplémentaire.
               </p>
 
-              {/* Produits extra déjà ajoutés */}
+              {/* Produits extra déjà ajoutés (masqués une fois validés) */}
               {Object.keys(extraAdded).length > 0 && (
                 <div className="mu-grid" style={{marginBottom:12}}>
-                  {Object.values(extraAdded).map((it, idx) => renderCard(it, 1000+idx))}
+                  {Object.values(extraAdded)
+                    .filter(it => !(byProduct[it.produit || it.product] || {}).lastDone)
+                    .map((it, idx) => renderCard(it, 1000+idx))}
                 </div>
               )}
 
