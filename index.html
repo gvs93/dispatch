@@ -552,7 +552,7 @@ const ADMIN_NAMES = ["henry", "raimbaud"];
 const isAdmin = (name) => ADMIN_NAMES.includes((name||"").toLowerCase().trim());
 
 // Version (sert aussi à confirmer le déploiement)
-const APP_VERSION = "v1.2";
+const APP_VERSION = "v1.3";
 
 // Init Firebase
 let db = null;
@@ -640,13 +640,19 @@ const NON_STORE_KEYWORDS = new Set([
   "designation", "libelle", "nom", "produit", "description",
   // quantités système
   "quantite", "qte", "qty", "uvc", "uc", "cde", "cde en uvc", "commande en uvc",
-  "commande", "cmd",
+  "commande", "cmd", "cdt", "pcb", "colisage", "conditionnement",
   // réceptions
   "recue", "receptionnee", "recu", "reception",
   "quantite receptionnee", "quantites receptionnees",
   "quantite cmd frs", "quantite cmd",
-  // prix / poids
+  // prix / montants / totaux (fichiers BDC, devis, factures)
   "prix", "tarif", "poids", "poids kg", "kg", "tva",
+  "pu", "pu ht", "pu ttc", "ht", "ttc", "puht", "putc",
+  "total", "totale", "totaux", "totalite",
+  "montant", "montant ht", "montant tva", "montant ttc",
+  "remise", "taux", "marge", "coef", "coeff",
+  // logistique / produit
+  "lot", "dlc", "ddm", "fournisseur", "frs", "four", "famille",
   // colonne vide
   ""
 ]);
@@ -778,9 +784,11 @@ function parseExcelFile(workbook) {
     else if (n === "article") {
       articleAsCode.push(idx);
     }
-    // Code article
+    // Code article / code-barres
     else if (n === "code article" || n === "code" || n === "ref" ||
-             n === "reference" || n === "référence") {
+             n === "reference" || n === "référence" ||
+             n === "ean" || n === "ean13" || n === "gencod" || n === "gencode" ||
+             n === "code barre" || n === "code barres" || n === "barcode") {
       if (colMap.article === undefined) colMap.article = idx;
     }
     // Commande globale (sans nom de magasin)
