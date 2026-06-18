@@ -1,0 +1,4361 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Kelbongoo - Dispatch palette et MU</title>
+<script>
+// Repli CDN : si jsDelivr est bloqué/inaccessible, on recharge depuis unpkg (synchrone).
+// Sans React/ReactDOM/Babel = page blanche.
+function __cdnFB(u){ document.write('<scr'+'ipt src="'+u+'"></scr'+'ipt>'); }
+</script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" onerror="__cdnFB('https://unpkg.com/react@18/umd/react.production.min.js')"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" onerror="__cdnFB('https://unpkg.com/react-dom@18/umd/react-dom.production.min.js')"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js" onerror="__cdnFB('https://unpkg.com/@babel/standalone/babel.min.js')"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+
+<!-- Firebase (compat builds, comme l'app prep) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f4f5f7;
+    color: #1a1a1a;
+    overscroll-behavior: none;
+  }
+  button { font-family: inherit; cursor: pointer; border: none; }
+  input { font-family: inherit; }
+
+  .app { max-width: 900px; margin: 0 auto; min-height: 100vh; background: #fff; }
+
+  /* Header */
+  .header {
+    position: sticky; top: 0; z-index: 10;
+    background: #1a4d2e;
+    color: #fff;
+    padding: 12px 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  }
+  .header-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: .3px; }
+  .header .sub { font-size: 12px; opacity: .85; margin-top: 2px; }
+  .header-actions { display: flex; gap: 8px; }
+  .header-btn {
+    background: rgba(255,255,255,.15);
+    color: #fff; padding: 6px 12px; border-radius: 6px;
+    font-size: 13px; font-weight: 600;
+  }
+  .header-btn:active { background: rgba(255,255,255,.3); }
+
+  /* Login / Upload screens */
+  .screen-center {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  .logo {
+    font-size: 28px; font-weight: 800; color: #1a4d2e;
+    margin-bottom: 8px; letter-spacing: -.5px;
+  }
+  .tag { color: #666; font-size: 14px; margin-bottom: 32px; }
+  .card {
+    width: 100%; max-width: 360px;
+    background: #fff; border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    padding: 24px;
+  }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #555; }
+  .field input, .field select {
+    width: 100%; padding: 12px; font-size: 16px;
+    border: 1.5px solid #ddd; border-radius: 8px; background: #fff;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: #1a4d2e; }
+  .btn-primary {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+    background: #1a4d2e; color: #fff; border-radius: 8px;
+    transition: background .15s;
+  }
+  .btn-primary:active { background: #0d3d20; }
+  .btn-primary:disabled { background: #aaa; }
+  .btn-secondary {
+    width: 100%; padding: 12px; font-size: 14px; font-weight: 600;
+    background: #f0f0f0; color: #333; border-radius: 8px;
+    margin-top: 8px;
+  }
+
+  /* Upload */
+  .upload-zone {
+    border: 2px dashed #1a4d2e; border-radius: 12px;
+    padding: 32px 16px; text-align: center;
+    background: #f4f9f5; cursor: pointer;
+  }
+  .upload-zone:active { background: #e6f1ea; }
+  .upload-zone .icon { font-size: 40px; margin-bottom: 8px; }
+  .upload-zone .label { font-weight: 600; color: #1a4d2e; }
+  .upload-zone .hint { font-size: 12px; color: #666; margin-top: 4px; }
+
+  /* Progress bar */
+  .progress-bar {
+    background: #e6e8ec; height: 6px; border-radius: 3px; overflow: hidden;
+    margin-top: 8px;
+  }
+  .progress-fill {
+    height: 100%; background: #4caf50;
+    transition: width .3s ease;
+  }
+  .progress-text {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: #666; margin-top: 4px;
+  }
+
+  /* Product list */
+  .product-list { padding: 8px; padding-bottom: 100px; }
+  .product-card {
+    background: #fff; border: 1.5px solid #e6e8ec;
+    border-radius: 10px; padding: 12px; margin-bottom: 8px;
+    transition: all .2s;
+  }
+  .product-card.locked {
+    background: #fff8e1; border-color: #ffb300;
+  }
+  .product-card.mine {
+    background: #e8f5e9; border-color: #1a4d2e;
+    box-shadow: 0 0 0 2px rgba(26, 77, 46, 0.15);
+  }
+  .product-card.done {
+    background: #e8f5e9; border-color: #4caf50; opacity: .7;
+  }
+  .product-card.done .designation { text-decoration: line-through; color: #555; }
+
+  .designation {
+    font-size: 14px; font-weight: 600;
+    line-height: 1.3; margin-bottom: 6px;
+  }
+  .product-meta {
+    font-size: 11px; color: #777; margin-bottom: 8px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .product-meta .article { font-family: monospace; }
+  .product-meta .recu { color: #1a4d2e; font-weight: 600; }
+
+  .dest-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px; margin-bottom: 8px;
+  }
+  .dest-cell {
+    background: #f4f5f7; border-radius: 6px;
+    padding: 8px 4px; text-align: center;
+  }
+  .dest-cell .name { font-size: 10px; font-weight: 700; color: #666; letter-spacing: .5px; }
+  .dest-cell .qty { font-size: 20px; font-weight: 800; color: #1a4d2e; margin-top: 2px; }
+  .dest-cell .qty.zero { color: #ccc; }
+
+  .actions-row { display: flex; gap: 6px; }
+  .btn-validate {
+    flex: 1; padding: 12px; font-size: 14px; font-weight: 700;
+    background: #1a4d2e; color: #fff; border-radius: 8px;
+  }
+  .btn-validate:active { background: #0d3d20; }
+  .btn-edit {
+    padding: 12px 14px; font-size: 14px;
+    background: #f0f0f0; color: #555; border-radius: 8px;
+  }
+  .btn-undo {
+    flex: 1; padding: 10px; font-size: 13px; font-weight: 600;
+    background: #fff; color: #4caf50; border: 1.5px solid #4caf50; border-radius: 8px;
+  }
+
+  .lock-badge {
+    background: #ffb300; color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 8px; border-radius: 10px;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .done-badge {
+    background: #4caf50; color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 3px 8px; border-radius: 10px;
+    display: inline-block; margin-bottom: 6px;
+  }
+  .timestamp {
+    font-size: 10px; color: #888; font-weight: 500;
+  }
+
+  /* Search bar */
+  .search-bar {
+    position: sticky; top: 64px; z-index: 5;
+    background: #fff; padding: 8px 12px;
+    border-bottom: 1px solid #e6e8ec;
+  }
+  .search-bar input {
+    width: 100%; padding: 10px 12px; font-size: 15px;
+    border: 1.5px solid #ddd; border-radius: 8px;
+  }
+  .search-bar input:focus { outline: none; border-color: #1a4d2e; }
+
+  /* Tabs */
+  .tabs-bar {
+    display: flex;
+    background: #fff;
+    border-bottom: 1px solid #e6e8ec;
+    position: sticky; top: 64px; z-index: 6;
+  }
+  .tab {
+    flex: 1;
+    padding: 12px 8px;
+    background: transparent;
+    color: #777;
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    transition: all .15s;
+  }
+  .tab.active {
+    color: #1a4d2e;
+    border-bottom-color: #1a4d2e;
+    background: #f4f9f5;
+  }
+  .tab:active { background: #e6f1ea; }
+
+  /* Mode scan */
+  .scan-mode {
+    padding: 16px;
+    padding-bottom: 100px;
+    min-height: calc(100vh - 200px);
+  }
+  .scan-search-wrap {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .scan-search-input {
+    width: 100%;
+    padding: 20px 50px 20px 20px;
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    border: 3px solid #1a4d2e;
+    border-radius: 16px;
+    background: #fff;
+    text-transform: lowercase;
+    letter-spacing: 2px;
+  }
+  .scan-search-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(26, 77, 46, 0.15);
+  }
+  .scan-search-input::placeholder {
+    color: #ccc;
+    font-weight: 500;
+    letter-spacing: normal;
+    font-size: 18px;
+  }
+  .scan-clear {
+    position: absolute;
+    right: 12px; top: 50%;
+    transform: translateY(-50%);
+    width: 36px; height: 36px;
+    background: #f0f0f0;
+    border-radius: 50%;
+    font-size: 16px;
+    color: #555;
+  }
+  .scan-hint {
+    text-align: center;
+    padding: 40px 20px;
+    color: #555;
+  }
+  .scan-results {
+    /* Cartes plus grandes en mode scan */
+  }
+  .scan-results .product-card {
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .scan-results .designation {
+    font-size: 16px;
+  }
+  .scan-results .dest-cell .qty {
+    font-size: 24px;
+  }
+  .scan-results .btn-validate {
+    padding: 16px;
+    font-size: 16px;
+  }
+
+  /* Bottom action bar */
+  .bottom-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; border-top: 1px solid #e6e8ec;
+    padding: 12px 16px; box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+    z-index: 10;
+  }
+  .bottom-bar .stats {
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: #666; margin-bottom: 8px;
+  }
+  .btn-finish {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 700;
+    background: #4caf50; color: #fff; border-radius: 8px;
+  }
+  .btn-finish:disabled { background: #aaa; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; padding: 16px;
+  }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 20px;
+    width: 100%; max-width: 360px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h3 { margin: 0 0 12px 0; font-size: 16px; }
+  .modal .designation-modal { font-size: 13px; color: #555; margin-bottom: 16px; }
+  .edit-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px; margin-bottom: 16px;
+  }
+  .edit-cell label { font-size: 11px; font-weight: 700; color: #666; }
+  .edit-cell input {
+    width: 100%; padding: 10px; font-size: 18px; font-weight: 700;
+    text-align: center; border: 1.5px solid #ddd; border-radius: 6px;
+    margin-top: 4px;
+  }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-actions button { flex: 1; padding: 12px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+  .btn-cancel { background: #f0f0f0; color: #555; }
+  .btn-confirm { background: #1a4d2e; color: #fff; }
+
+  /* Recap */
+  .recap-section { padding: 16px; padding-bottom: 100px; }
+  .recap-card {
+    background: #fff; border-radius: 12px;
+    padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.05);
+  }
+  .recap-card h3 { margin: 0 0 12px 0; font-size: 15px; }
+  .recap-stat {
+    display: flex; justify-content: space-between;
+    padding: 6px 0; border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+  }
+  .recap-stat:last-child { border-bottom: none; }
+  .recap-stat .label { color: #666; }
+  .recap-stat .value { font-weight: 700; color: #1a4d2e; }
+
+  .anomaly-item {
+    padding: 10px; border-radius: 6px;
+    background: #fff3e0; border-left: 3px solid #ff9800;
+    font-size: 12px; margin-bottom: 6px;
+  }
+  .anomaly-item .product { font-weight: 600; }
+  .anomaly-item .detail { color: #666; margin-top: 2px; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 10px 16px;
+    border-radius: 8px; font-size: 13px; z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  }
+
+  /* Connection status */
+  .conn-status {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+    background: rgba(255,255,255,.2);
+  }
+  .conn-status.offline { background: #d32f2f; }
+
+  /* ===== Choix du mode (Palette / MU) ===== */
+  .mode-grid { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+  .mode-btn {
+    width: 100%; padding: 26px 18px; border-radius: 16px;
+    background: #fff; border: 2px solid #e6e8ec; text-align: left;
+    box-shadow: 0 4px 16px rgba(0,0,0,.06); transition: all .15s;
+  }
+  .mode-btn:active { transform: scale(.98); }
+  .mode-btn .ico { font-size: 38px; }
+  .mode-btn .ttl { font-size: 20px; font-weight: 800; color: #1a4d2e; margin-top: 6px; }
+  .mode-btn .desc { font-size: 13px; color: #666; margin-top: 4px; line-height: 1.35; }
+  .mode-btn.mu { border-color: #ef6c00; }
+  .mode-btn.mu .ttl { color: #ef6c00; }
+
+  /* ===== Mode MU (mise en unité) ===== */
+  .mu-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 14px; padding: 14px; padding-bottom: 120px;
+  }
+  .mu-card {
+    background: #fff; border: 2px solid #e6e8ec; border-radius: 16px;
+    padding: 18px; display: flex; flex-direction: column;
+    box-shadow: 0 2px 8px rgba(0,0,0,.05); transition: all .15s;
+  }
+  .mu-card.active { border-color: #ef6c00; background: #fff8f1; box-shadow: 0 0 0 3px rgba(239,108,0,.15); }
+  .mu-card .mu-name {
+    font-size: 24px; font-weight: 800; line-height: 1.15; color: #1a1a1a;
+    margin-bottom: 12px;
+  }
+  .mu-fourchette {
+    font-size: 16px; color: #1a4d2e; background: #eaf3ec;
+    border-radius: 10px; padding: 8px 12px; margin-bottom: 12px;
+    line-height: 1.3;
+  }
+  .mu-fourchette b { font-size: 18px; }
+  .mu-target {
+    display: inline-flex; align-items: baseline; gap: 8px;
+    background: #1a4d2e; color: #fff; border-radius: 12px;
+    padding: 10px 16px; align-self: flex-start; margin-bottom: 12px;
+  }
+  .mu-target .lbl { font-size: 13px; font-weight: 600; opacity: .85; }
+  .mu-target .num { font-size: 34px; font-weight: 900; line-height: 1; }
+  .mu-sub { font-size: 13px; color: #555; margin-bottom: 6px; display:flex; gap:10px; flex-wrap:wrap; }
+  .mu-sub .done { color: #2e7d32; font-weight: 700; }
+  .mu-busy {
+    font-size: 12px; font-weight: 700; color: #ef6c00;
+    background: #fff3e0; border-radius: 8px; padding: 4px 8px;
+    display: inline-block; margin-bottom: 10px;
+  }
+  .mu-start {
+    margin-top: auto; width: 100%; padding: 18px; font-size: 19px; font-weight: 800;
+    background: #1a4d2e; color: #fff; border-radius: 12px;
+  }
+  .mu-start:active { background: #0d3d20; }
+  .mu-running {
+    margin-top: auto; background: #fff3e0; border-radius: 12px; padding: 12px;
+    text-align: center;
+  }
+  .mu-running .clock {
+    font-size: 40px; font-weight: 900; color: #ef6c00; font-variant-numeric: tabular-nums;
+    letter-spacing: 1px; line-height: 1;
+  }
+  .mu-running .since { font-size: 11px; color: #999; margin-top: 2px; }
+  .mu-running .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .mu-done-btn {
+    flex: 1; padding: 16px; font-size: 17px; font-weight: 800;
+    background: #ef6c00; color: #fff; border-radius: 10px;
+  }
+  .mu-done-btn:active { background: #d35f00; }
+  .mu-cancel-btn {
+    padding: 16px; font-size: 15px; font-weight: 700;
+    background: #fff; color: #999; border: 1.5px solid #ddd; border-radius: 10px;
+  }
+  /* Stepper de saisie du nb de sachets faits */
+  .mu-stepper { margin-top: auto; background: #fff8f1; border-radius: 12px; padding: 14px; }
+  .mu-stepper .q { text-align: center; font-size: 14px; font-weight: 700; color: #555; margin-bottom: 10px; }
+  .mu-stepper .row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+  .mu-step-pm {
+    width: 58px; height: 58px; border-radius: 50%; font-size: 30px; font-weight: 900;
+    background: #fff; border: 2px solid #ef6c00; color: #ef6c00;
+  }
+  .mu-step-pm:active { background: #ffe0c2; }
+  .mu-step-val {
+    width: 86px; text-align: center; font-size: 44px; font-weight: 900;
+    border: none; background: transparent; color: #1a1a1a;
+  }
+  .mu-step-val:focus { outline: none; }
+  .mu-validate {
+    width: 100%; margin-top: 14px; padding: 16px; font-size: 17px; font-weight: 800;
+    background: #2e7d32; color: #fff; border-radius: 10px;
+  }
+  .mu-validate:active { background: #1b5e20; }
+  .mu-topbar {
+    position: sticky; top: 64px; z-index: 5; background: #fff;
+    padding: 10px 12px; border-bottom: 1px solid #e6e8ec;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .mu-topbar input {
+    flex: 1; padding: 11px 12px; font-size: 15px;
+    border: 1.5px solid #ddd; border-radius: 8px;
+  }
+  .mu-topbar input:focus { outline: none; border-color: #ef6c00; }
+  .mu-refresh {
+    padding: 11px 14px; font-size: 15px; background: #f0f0f0; color: #555; border-radius: 8px; font-weight: 700;
+  }
+  .mu-bottom {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+    background: #1a4d2e; color: #fff; padding: 12px 16px;
+    display: flex; justify-content: space-around; text-align: center;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.1);
+  }
+  .mu-bottom .b-num { font-size: 24px; font-weight: 900; }
+  .mu-bottom .b-lbl { font-size: 11px; opacity: .85; }
+</style>
+</head>
+<body>
+<div id="root"><div id="boot-screen" style="max-width:440px;margin:80px auto;text-align:center;font-family:-apple-system,system-ui,sans-serif;color:#666"><div style="font-size:34px">🥬</div><div style="margin-top:10px;font-size:15px">Chargement…</div></div></div>
+
+<script>
+  // Message d'erreur lisible (avec bouton recharger) au lieu d'une page blanche.
+  window.showBootError = function(msg){
+    var r = document.getElementById('root'); if(!r) return;
+    r.innerHTML = '<div style="max-width:440px;margin:60px auto;padding:24px;font-family:-apple-system,system-ui,sans-serif;text-align:center;color:#1a1a1a">'
+      + '<div style="font-size:40px">⚠️</div>'
+      + '<h2 style="margin:12px 0 6px;font-size:18px">Le site n\'a pas pu se charger</h2>'
+      + '<p style="color:#666;font-size:14px;line-height:1.4">' + (msg || 'Vérifie ta connexion internet puis réessaie.') + '</p>'
+      + '<button onclick="location.reload()" style="margin-top:14px;background:#2e7d32;color:#fff;border:0;border-radius:8px;padding:11px 20px;font-size:15px;font-weight:600">↻ Recharger</button>'
+      + '<p style="color:#999;font-size:12px;margin-top:16px;line-height:1.4">Si ça persiste : autre navigateur, autre connexion (4G), ou désactive un bloqueur de pub.</p>'
+      + '</div>';
+  };
+  // Watchdog : si l'appli n'a pas démarré ~14 s après le chargement (Babel/React non chargés…),
+  // on remplace la page blanche par un message clair.
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      if (document.getElementById('boot-screen')) {
+        window.showBootError('Le chargement a échoué (réseau ou bloqueur). Réessaie.');
+      }
+    }, 14000);
+  });
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+/* =========================================================================
+   CONFIGURATION
+   ========================================================================= */
+
+// Firebase config - projet kelbongoo-prep (app Dispatch)
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDtcoRoknYM4JrJJfcuhpnVMeS-OurwYdU",
+  authDomain: "kelbongoo-prep.firebaseapp.com",
+  databaseURL: "https://kelbongoo-prep-default-rtdb.firebaseio.com",
+  projectId: "kelbongoo-prep",
+  storageBucket: "kelbongoo-prep.firebasestorage.app",
+  messagingSenderId: "596701505006",
+  appId: "1:596701505006:web:3f2f8d3f0f43ca828e5aff"
+};
+
+// URL Apps Script pour envoi du récap (Kelbongoo Distribution Proxy)
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj8BOPRY7V_Ni_0a-6YmNA-1HyRAcf0QXAL1FMy04Xnp1W4Am-cNuR4poQOHzu4VCL4Q/exec";
+const FL_PROXY_URL = "https://script.google.com/macros/s/AKfycbyVvvafumNfLZ7RzseUvoHaghPK7c-_7KqthgtV_VY9ulXe7sJIYEclWnratDbBJeDd/exec"; // proxy FL/Probon
+
+// === MU (Mise en unité) ===
+// Feuille FL lue côté serveur via le proxy Apps Script (action=get-mu-list).
+// La feuille n'est pas publique : impossible de la lire directement depuis le navigateur,
+// d'où le passage par Apps Script (voir mu_apps_script.gs à ajouter au proxy).
+const MU_SHEET_ID = "1PXQU4QP_bh_sRCEHonrMM7FkWmJWtNPyxDBPPRBlNVQ"; // sheet COMMANDE FL KBG x PROBON
+const MU_SHEET_GID = 1075113568;
+
+// Durée de verrouillage d'une ligne (ms) - 30s sans renouvellement = auto-déverrouillage
+const LOCK_DURATION_MS = 30000;
+const LOCK_REFRESH_MS = 10000;
+
+// Liste des opérateurs ayant accès au mode Admin (case-insensitive)
+const ADMIN_NAMES = ["henry", "raimbaud"];
+const isAdmin = (name) => ADMIN_NAMES.includes((name||"").toLowerCase().trim());
+
+// Version (sert aussi à confirmer le déploiement)
+const APP_VERSION = "v1.1";
+
+// Init Firebase
+let db = null;
+let firebaseReady = false;
+try {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.database();
+  firebaseReady = true;
+} catch(e) { console.error("Firebase init failed", e); }
+
+/* =========================================================================
+   HELPERS
+   ========================================================================= */
+
+const fmtTime = (ts) => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+};
+
+const fmtDuration = (ms) => {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h${(m%60).toString().padStart(2,"0")}`;
+  if (m > 0) return `${m}min ${s%60}s`;
+  return `${s}s`;
+};
+
+// Chrono live mm:ss (ou h:mm:ss)
+const fmtClock = (ms) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const s = total % 60;
+  const m = Math.floor(total / 60) % 60;
+  const h = Math.floor(total / 3600);
+  const pad = (n) => n.toString().padStart(2, "0");
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
+};
+
+// Clé de date du jour (YYYY-MM-DD, heure locale) pour regrouper les MU
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2,"0")}-${d.getDate().toString().padStart(2,"0")}`;
+};
+const fmtDateKey = (k) => {
+  if (!k) return "";
+  const [y,m,d] = k.split("-");
+  return new Date(+y, +m-1, +d).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" });
+};
+
+const stripAccents = (s) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+// Identifiant stable pour une ligne (basé sur le code article + index pour les cas sans code)
+const productKey = (p, idx) => {
+  const code = (p.article || "").toString().trim();
+  if (code) return `a_${code}`;
+  return `l_${idx}`;
+};
+
+/* =========================================================================
+   EXCEL PARSING
+   ========================================================================= */
+
+// Normalise un nom de colonne pour le matching (sans accents, lowercase, trim)
+const normCol = (s) => stripAccents((s||"").toString()).toLowerCase().trim();
+
+// Mapping codes G5 (Magasin XX) → sigle
+const G5_STORE_MAP = {
+  "01": "rob", "03": "tol", "98": "pdp",
+  "05": "bic", "02": "bar", "04": "bor",
+  "06": "ces", "07": "cha", "09": "for",
+  "10": "lil", "11": "nca", "12": "ncc",
+  "13": "pad", "14": "pdc", "17": "rom",
+  "18": "stb"
+};
+
+// Colonnes "système" à ne jamais interpréter comme un magasin.
+// On utilise une LISTE NOIRE (mots-clés connus) plutôt qu'une liste blanche de sites :
+// ainsi tout nouveau site est reconnu automatiquement sans modifier le code.
+const NON_STORE_KEYWORDS = new Set([
+  // identifiants produit
+  "article", "code article", "code", "ref", "reference", "ean", "barcode", "sku",
+  // désignations
+  "designation", "libelle", "nom", "produit", "description",
+  // quantités système
+  "quantite", "qte", "qty", "uvc", "uc", "cde", "cde en uvc", "commande en uvc",
+  "commande", "cmd",
+  // réceptions
+  "recue", "receptionnee", "recu", "reception",
+  "quantite receptionnee", "quantites receptionnees",
+  "quantite cmd frs", "quantite cmd",
+  // prix / poids
+  "prix", "tarif", "poids", "poids kg", "kg", "tva",
+  // colonne vide
+  ""
+]);
+
+// Parse une cellule G5 qui peut être au format "07-1-59 ||| 36.000000"
+// Retourne le nombre après les ||| ou simplement la valeur si pas de ||| .
+const parseG5Cell = (v) => {
+  if (v === "" || v === null || v === undefined) return 0;
+  const s = v.toString().trim();
+  // Format G5 : "XX-Y-ZZZ ||| nombre.000000"
+  // On peut avoir plusieurs ||| (ex: "98 ||| 98-1-0000000008 ||| 36.000000")
+  // → on prend toujours ce qui est après le DERNIER |||
+  const lastSep = s.lastIndexOf("|||");
+  let numStr = lastSep >= 0 ? s.substring(lastSep + 3).trim() : s;
+  // Format "12u = 2.798000" (autre ancien format) → 12
+  const um = numStr.match(/^(\d+)\s*u/);
+  if (um) return parseInt(um[1], 10);
+  const n = parseFloat(numStr);
+  return isNaN(n) ? 0 : Math.round(n); // arrondit (36.000000 -> 36)
+};
+
+// Détecte la structure du fichier - magasins dynamiques
+// Retourne :
+//   - products : tableau de produits avec champ `stores` dynamique (map)
+//   - storeColumns : tableau de définitions de colonnes magasin
+//       { code: "ROB" ou "MAGASIN_04" (uniq), label: "ROB" ou "Magasin 04",
+//         needsNaming: bool (true si non reconnu, demande à l'utilisateur) }
+function parseExcelFile(workbook) {
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+  // Helper : détecte si une cellule est un magasin et retourne sa définition
+  // - "ROB", "TOL", "PDP" exacts → reconnu
+  // - "Magasin 01/03/98" → reconnu via mapping G5_STORE_MAP
+  // - "Magasin XX" non mappé → inconnu (needsNaming)
+  // - "Commande ROB" / "ROB Commande" → reconnu
+  // - Autre nom → null
+  // Détecte si un en-tête est un magasin.
+  // Aucune liste blanche de codes : tout sigle court non-système est accepté.
+  // → un nouveau site (ex: "XYZ") sera reconnu sans toucher au code.
+  const isSigle = (s) => /^[a-z0-9]{2,6}$/.test(s) && !NON_STORE_KEYWORDS.has(s);
+
+  const detectStoreColumn = (cellRaw, cellNorm) => {
+    if (!cellNorm) return null;
+    if (NON_STORE_KEYWORDS.has(cellNorm)) return null;
+
+    // Format G5 : "Magasin XX"
+    if (cellNorm.startsWith("magasin")) {
+      const code = cellNorm.replace(/^magasin\s*/, "").trim();
+      const mapped = G5_STORE_MAP[code];
+      if (mapped) {
+        const uc = mapped.toUpperCase();
+        return { code: uc, label: uc, needsNaming: false };
+      }
+      return { code: `MAGASIN_${code}`, label: `Magasin ${code}`, needsNaming: true, originalHeader: cellRaw };
+    }
+
+    // En-tête court (2-6 chars alphanums) → sigle de site
+    if (isSigle(cellNorm)) {
+      const uc = cellNorm.toUpperCase();
+      return { code: uc, label: uc, needsNaming: false };
+    }
+
+    // Token court dans libellé composé : "Livraison BIC", "Cmd ROB", "Qté NCA"
+    const tokens = cellNorm.split(/[\s\-_()\/]+/).filter(Boolean);
+    for (const t of tokens) {
+      if (isSigle(t)) {
+        const uc = t.toUpperCase();
+        return { code: uc, label: uc, needsNaming: false };
+      }
+    }
+
+    return null;
+  };
+
+  // Cherche la ligne d'en-têtes (plusieurs stratégies)
+  let headerIdx = -1;
+  let headers = null;
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = rows[i].map(c => normCol(c));
+    const hasDesig = row.some(c =>
+      c.includes("designation") || c === "produit" || c === "libelle" ||
+      c === "libellé" || c === "nom" || c === "article" ||
+      c === "description" || c.includes("designation produit")
+    );
+    if (hasDesig) {
+      headerIdx = i;
+      headers = rows[i];
+      break;
+    }
+  }
+  if (headerIdx === -1) {
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      const row = rows[i].map(c => normCol(c));
+      const hasQty = row.some(c =>
+        c === "quantite" || c === "qte" || c === "qty" ||
+        c === "uvc" || c === "cde en uvc" || c === "cde" ||
+        c.includes("commande") || detectStoreColumn(null, c) !== null
+      );
+      const hasTextHeader = row.some(c => c.length > 0 && c.length < 50 && !/^\d+([.,]\d+)?$/.test(c));
+      if (hasQty && hasTextHeader) {
+        headerIdx = i;
+        headers = rows[i];
+        break;
+      }
+    }
+  }
+  if (headerIdx === -1) {
+    throw new Error("Impossible de trouver une ligne d'en-têtes dans le fichier (cherché : produit/désignation/article/quantité/commande).");
+  }
+
+  // Map des colonnes : article, désignation, cmd, recue + storeColumns (dynamique)
+  const colMap = {};
+  let isG5Format = false;
+  const articleAsCode = [];
+  const storeColumns = []; // [{ idx, def: {code, label, needsNaming, ...} }]
+
+  headers.forEach((h, idx) => {
+    const n = normCol(h);
+    if (!n) return;
+
+    // Désignation prioritaire
+    if (n.includes("designation") || n === "produit" || n === "libelle" || n === "libellé" ||
+        n === "nom" || n === "description") {
+      if (colMap.designation === undefined) colMap.designation = idx;
+    }
+    // "Article" ambigu
+    else if (n === "article") {
+      articleAsCode.push(idx);
+    }
+    // Code article
+    else if (n === "code article" || n === "code" || n === "ref" ||
+             n === "reference" || n === "référence") {
+      if (colMap.article === undefined) colMap.article = idx;
+    }
+    // Commande globale (sans nom de magasin)
+    else if (detectStoreColumn(null, n) === null && (n.includes("cmd") || n === "commande" ||
+             (n.includes("commande") && !detectStoreColumn(null, n)))) {
+      if (colMap.cmd === undefined) colMap.cmd = idx;
+    }
+    // Réception
+    else if (n.includes("recept") || n.includes("recu") || n === "reçu") {
+      if (colMap.recue === undefined) colMap.recue = idx;
+    }
+    // Magasin (connu ou inconnu)
+    else {
+      const def = detectStoreColumn(h, n);
+      if (def) {
+        storeColumns.push({ idx, def });
+        if (n.startsWith("magasin")) isG5Format = true;
+      }
+    }
+  });
+
+  // Article ambigu : code (chiffres) ou désignation (texte) ?
+  if (colMap.designation === undefined && articleAsCode.length > 0) {
+    const articleIdx = articleAsCode[0];
+    let textCount = 0, numericCount = 0;
+    for (let i = headerIdx + 1; i < Math.min(headerIdx + 6, rows.length); i++) {
+      const v = (rows[i] && rows[i][articleIdx]) ? String(rows[i][articleIdx]).trim() : "";
+      if (!v) continue;
+      if (/^\d{6,}$/.test(v)) numericCount++;
+      else if (v.length > 5 && /[a-zA-Z]/.test(v)) textCount++;
+    }
+    if (textCount > numericCount) {
+      colMap.designation = articleIdx;
+    } else if (colMap.article === undefined) {
+      colMap.article = articleIdx;
+    }
+  }
+
+  // Fallback désignation : colonne avec le plus de texte long
+  if (colMap.designation === undefined) {
+    const usedCols = new Set([
+      colMap.article, colMap.cmd, colMap.recue,
+      ...storeColumns.map(s => s.idx)
+    ].filter(x => x !== undefined));
+    let bestIdx = -1, bestAvgLen = 0;
+    for (let c = 0; c < headers.length; c++) {
+      if (usedCols.has(c)) continue;
+      let totalLen = 0, count = 0;
+      for (let i = headerIdx + 1; i < Math.min(headerIdx + 11, rows.length); i++) {
+        const v = (rows[i] && rows[i][c]) ? String(rows[i][c]).trim() : "";
+        if (!v) continue;
+        if (/^[\d\s.,]+$/.test(v)) continue;
+        totalLen += v.length;
+        count++;
+      }
+      const avg = count > 0 ? totalLen / count : 0;
+      if (avg > bestAvgLen && avg > 8) {
+        bestAvgLen = avg;
+        bestIdx = c;
+      }
+    }
+    if (bestIdx !== -1) colMap.designation = bestIdx;
+  }
+
+  // Si aucun magasin trouvé → cherche colonne quantité générique
+  // L'admin devra nommer cette colonne (needsNaming = true)
+  if (storeColumns.length === 0) {
+    let quantityColIdx = -1;
+    headers.forEach((h, idx) => {
+      const n = normCol(h);
+      if (!n) return;
+      if (idx === colMap.article || idx === colMap.designation ||
+          idx === colMap.cmd || idx === colMap.recue) return;
+      if (quantityColIdx === -1 && (
+        n === "quantite" || n === "qte" || n === "qty" ||
+        n === "commande en uvc" || n === "uvc" || n === "uc" ||
+        n === "cde en uvc" || n === "cde" ||
+        n.includes("cde en uvc") || n.includes("commande en uvc") ||
+        (n.includes("quantite") && !n.includes("recept")) ||
+        (n.includes("commande") && !detectStoreColumn(null, n)) ||
+        (n.startsWith("cde") && !detectStoreColumn(null, n))
+      )) {
+        quantityColIdx = idx;
+      }
+    });
+    if (quantityColIdx !== -1) {
+      storeColumns.push({
+        idx: quantityColIdx,
+        def: {
+          code: `COL_${quantityColIdx}`,
+          label: String(headers[quantityColIdx] || "Colonne quantité").trim(),
+          needsNaming: true,
+          originalHeader: headers[quantityColIdx]
+        }
+      });
+    } else if (colMap.cmd !== undefined) {
+      // Fallback : on prend la colonne CMD
+      storeColumns.push({
+        idx: colMap.cmd,
+        def: {
+          code: `COL_${colMap.cmd}`,
+          label: String(headers[colMap.cmd] || "Commande").trim(),
+          needsNaming: true,
+          originalHeader: headers[colMap.cmd]
+        }
+      });
+      colMap.cmd = undefined;
+    }
+  }
+
+  if (colMap.designation === undefined) {
+    throw new Error("Impossible de trouver une colonne désignation/produit dans le fichier.");
+  }
+  if (storeColumns.length === 0) {
+    throw new Error("Aucune colonne de quantité/magasin trouvée dans le fichier.");
+  }
+
+  // Parse les lignes produit
+  const products = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every(c => c === "" || c === null || c === undefined)) continue;
+
+    const designation = (row[colMap.designation] || "").toString().trim();
+    if (!designation) continue;
+
+    // Ignore lignes totaux
+    const desigLower = stripAccents(designation.toLowerCase());
+    if (desigLower.includes("montant ht") || desigLower.includes("montant ttc") ||
+        desigLower.includes("montant tva") || desigLower === "total" || desigLower === "totaux") {
+      continue;
+    }
+
+    const parse = isG5Format ? parseG5Cell : (v) => {
+      if (v === "" || v === null || v === undefined) return 0;
+      const s = v.toString().trim();
+      // Détecte le format G5 à la volée sur le contenu de la cellule
+      // (cas où les en-têtes sont ROB/TOL/BIC mais les valeurs sont au format G5)
+      if (s.includes("|||")) return parseG5Cell(s);
+      const m = s.match(/^(\d+)\s*u/);
+      if (m) return parseInt(m[1], 10);
+      const cleaned = s.replace(",", ".");
+      const n = parseFloat(cleaned);
+      return isNaN(n) ? 0 : Math.round(n);
+    };
+
+    // Construit le map des quantités par magasin
+    const stores = {};
+    let total = 0;
+    for (const sc of storeColumns) {
+      const q = parse(row[sc.idx]);
+      stores[sc.def.code] = q;
+      total += q;
+    }
+
+    if (total === 0) continue; // ligne sans quantité
+
+    let recue;
+    if (colMap.recue !== undefined) {
+      recue = parse(row[colMap.recue]);
+    } else {
+      recue = total;
+    }
+
+    let cmd;
+    if (colMap.cmd !== undefined) {
+      cmd = parse(row[colMap.cmd]);
+    } else {
+      cmd = recue;
+    }
+
+    products.push({
+      article: colMap.article !== undefined ? (row[colMap.article] || "").toString().trim() : "",
+      designation,
+      cmd,
+      recue,
+      stores // map { CODE: quantité }
+    });
+  }
+
+  // Calcule le total de chaque colonne magasin
+  const storeTotals = {};
+  storeColumns.forEach(sc => { storeTotals[sc.def.code] = 0; });
+  products.forEach(p => {
+    storeColumns.forEach(sc => {
+      storeTotals[sc.def.code] += (p.stores[sc.def.code] || 0);
+    });
+  });
+
+  // Ignore les colonnes magasin INCONNUES dont le total est 0
+  // (ex: Magasin 05 sans commande aujourd'hui → on ne demande pas son nom)
+  const keptStoreCols = storeColumns.filter(sc => {
+    if (sc.def.needsNaming && storeTotals[sc.def.code] === 0) {
+      return false; // colonne inconnue et vide → on l'ignore
+    }
+    return true;
+  });
+
+  // Nettoie aussi les produits : retire les clés des magasins qu'on ignore
+  const removedCodes = storeColumns
+    .filter(sc => !keptStoreCols.some(k => k.def.code === sc.def.code))
+    .map(sc => sc.def.code);
+  if (removedCodes.length > 0) {
+    products.forEach(p => {
+      removedCodes.forEach(code => { delete p.stores[code]; });
+    });
+  }
+
+  // Retourne aussi les définitions de magasins (pour l'écran de nommage si besoin)
+  return { products, storeColumns: keptStoreCols.map(s => s.def) };
+}
+
+
+/* =========================================================================
+   FIREBASE / STATE SYNC
+   ========================================================================= */
+
+// Une session = un dispatch en cours, identifiée par un sessionId
+// Structure dans Firebase:
+//   /dispatch/{sessionId}/meta : { supplier, startedAt, operators: [...], products: [...] }
+//   /dispatch/{sessionId}/state/{productKey} : { done, doneBy, doneAt, lockedBy, lockedAt, qtyRob, qtyTol, qtyPdp }
+
+function useFirebaseSession(sessionId, operatorName) {
+  const [state, setState] = useState({});
+  const [meta, setMeta] = useState(null);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    if (!firebaseReady || !sessionId) return;
+
+    const stateRef = db.ref(`dispatch/${sessionId}/state`);
+    const metaRef = db.ref(`dispatch/${sessionId}/meta`);
+    const connectedRef = db.ref(".info/connected");
+
+    const onState = (snap) => setState(snap.val() || {});
+    const onMeta = (snap) => setMeta(snap.val() || null);
+    const onConn = (snap) => setConnected(!!snap.val());
+
+    stateRef.on("value", onState);
+    metaRef.on("value", onMeta);
+    connectedRef.on("value", onConn);
+
+    return () => {
+      stateRef.off("value", onState);
+      metaRef.off("value", onMeta);
+      connectedRef.off("value", onConn);
+    };
+  }, [sessionId]);
+
+  // Mise à jour locale (fallback si pas Firebase)
+  const updateLocal = useCallback((key, patch) => {
+    setState(prev => ({ ...prev, [key]: { ...(prev[key] || {}), ...patch } }));
+  }, []);
+
+  const lockRow = useCallback((key) => {
+    const patch = { lockedBy: operatorName, lockedAt: Date.now() };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, operatorName, updateLocal]);
+
+  const unlockRow = useCallback((key) => {
+    const patch = { lockedBy: null, lockedAt: null };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, updateLocal]);
+
+  const validateRow = useCallback((key, qtys) => {
+    const patch = {
+      done: true,
+      doneBy: operatorName,
+      doneAt: Date.now(),
+      lockedBy: null,
+      lockedAt: null,
+      ...(qtys || {})
+    };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, operatorName, updateLocal]);
+
+  const undoRow = useCallback((key) => {
+    const patch = { done: false, doneBy: null, doneAt: null };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/state/${key}`).update(patch);
+    } else {
+      updateLocal(key, patch);
+    }
+  }, [sessionId, updateLocal]);
+
+  const initSession = useCallback((supplier, products) => {
+    const metaData = {
+      supplier,
+      startedAt: Date.now(),
+      products,
+    };
+    if (firebaseReady && sessionId) {
+      db.ref(`dispatch/${sessionId}/meta`).set(metaData);
+    } else {
+      setMeta(metaData);
+    }
+  }, [sessionId]);
+
+  return { state, meta, connected: firebaseReady ? connected : true, lockRow, unlockRow, validateRow, undoRow, initSession };
+}
+
+/* =========================================================================
+   COMPOSANTS
+   ========================================================================= */
+
+function LoginScreen({ onLogin }) {
+  const [name, setName] = useState(localStorage.getItem("dispatch_operator") || "");
+
+  const submit = () => {
+    if (!name.trim()) return;
+    localStorage.setItem("dispatch_operator", name.trim());
+    onLogin(name.trim());
+  };
+
+  return (
+    <div className="screen-center">
+      <div className="logo">Kelbongoo</div>
+      <div className="tag">Dispatch Palette</div>
+      <div className="card">
+        <div className="field">
+          <label>Ton prénom</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Ex: Marie"
+            autoFocus
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+          />
+        </div>
+        <button className="btn-primary" onClick={submit} disabled={!name.trim()}>
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UploadScreen({ operator, onSessionStart, onJoinSession, onOpenAdmin, onLogout, onNeedsNaming, onBackToMode, onReset }) {
+  const [error, setError] = useState("");
+  const [supplierName, setSupplierName] = useState("");
+  const [pendingFile, setPendingFile] = useState(null);
+  const fileRef = useRef(null);
+
+  // État du chargement BDC depuis Drive
+  const [showBdcModal, setShowBdcModal] = useState(false);
+  const [bdcList, setBdcList] = useState([]);
+  const [bdcLoading, setBdcLoading] = useState(false);
+  const [bdcError, setBdcError] = useState("");
+  const [bdcSupplier, setBdcSupplier] = useState("");
+  const [loadingBdcId, setLoadingBdcId] = useState(null);
+
+  // Vérifie si une session est déjà active (sessions non terminées, peu importe l'âge)
+  const [activeSessions, setActiveSessions] = useState([]);
+  useEffect(() => {
+    if (!firebaseReady) return;
+    const ref = db.ref("dispatch");
+    const handler = (snap) => {
+      const all = snap.val() || {};
+      const recent = [];
+      Object.entries(all).forEach(([sid, s]) => {
+        if (s.meta && s.meta.startedAt) {
+          const total = (s.meta.products || []).length;
+          const done = Object.values(s.state || {}).filter(x => x && x.done).length;
+          // On affiche TOUTES les sessions non terminées (pas de filtre temps)
+          if (done < total) {
+            recent.push({ id: sid, supplier: s.meta.supplier, startedAt: s.meta.startedAt, total, done });
+          }
+        }
+      });
+      recent.sort((a,b) => b.startedAt - a.startedAt);
+      setActiveSessions(recent);
+    };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, []);
+
+  // Charge la liste des BDC depuis Apps Script
+  const openBdcModal = async () => {
+    setShowBdcModal(true);
+    setBdcLoading(true);
+    setBdcError("");
+    setBdcList([]);
+    try {
+      // Apps Script avec no-cors ne renvoie pas de réponse lisible, donc on doit utiliser GET
+      const url = `${APPS_SCRIPT_URL}?action=list-bdcs`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.success) {
+        setBdcList(data.bdcs || []);
+        if ((data.bdcs || []).length === 0) {
+          setBdcError("Aucun BDC trouvé dans le dossier Drive (modifié dans les 3 derniers jours, nom contenant 'BDC').");
+        }
+      } else {
+        setBdcError(data.error || "Erreur inconnue");
+      }
+    } catch (e) {
+      setBdcError(`Impossible de charger la liste : ${e.message}`);
+    } finally {
+      setBdcLoading(false);
+    }
+  };
+
+  const loadBdc = async (bdc) => {
+    if (!bdcSupplier.trim()) {
+      setBdcError("Indique d'abord le nom du fournisseur (qui apparaîtra sur les BL).");
+      return;
+    }
+    setLoadingBdcId(bdc.id);
+    setBdcError("");
+    try {
+      const url = `${APPS_SCRIPT_URL}?action=get-bdc&fileId=${encodeURIComponent(bdc.id)}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "Erreur de chargement du BDC");
+
+      // Construit un workbook compatible avec le parseur existant
+      const ws = XLSX.utils.aoa_to_sheet(data.rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "BDC");
+
+      const { products, storeColumns } = parseExcelFile(wb);
+      if (products.length === 0) {
+        throw new Error("Aucun produit reconnu dans ce BDC (vérifie les en-têtes de colonnes).");
+      }
+
+      const supplier = bdcSupplier.trim();
+      const needsNaming = storeColumns.some(s => s.needsNaming);
+      if (needsNaming) {
+        setShowBdcModal(false);
+        setBdcSupplier("");
+        onNeedsNaming({ supplier, products, storeColumns });
+        return;
+      }
+      const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
+      setShowBdcModal(false);
+      setBdcSupplier("");
+      onSessionStart(sessionId, supplier, products, storeColumns);
+    } catch (e) {
+      setBdcError(e.message);
+    } finally {
+      setLoadingBdcId(null);
+    }
+  };
+
+  const handleFileSelected = (file) => {
+    if (!file) return;
+    if (!supplierName.trim()) {
+      setError("Indique d'abord le nom du fournisseur avant de charger le fichier.");
+      // Garde le fichier en mémoire pour quand le nom sera entré
+      setPendingFile(file);
+      return;
+    }
+    processFile(file, supplierName.trim());
+  };
+
+  const processFile = async (file, supplier) => {
+    setError("");
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const { products, storeColumns } = parseExcelFile(wb);
+      if (products.length === 0) {
+        setError("Aucun produit trouvé dans le fichier.");
+        return;
+      }
+      // Si des magasins ont besoin d'être nommés, on passe par l'écran de nommage
+      const needsNaming = storeColumns.some(s => s.needsNaming);
+      if (needsNaming) {
+        onNeedsNaming({ supplier, products, storeColumns });
+        return;
+      }
+      const sessionId = `${stripAccents(supplier).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
+      onSessionStart(sessionId, supplier, products, storeColumns);
+    } catch (e) {
+      setError(`Erreur de lecture: ${e.message}`);
+    }
+  };
+
+  // Si le user a maintenant entré le nom et qu'on avait un fichier en attente
+  const handleSupplierConfirm = () => {
+    if (!supplierName.trim()) {
+      setError("Le nom du fournisseur est obligatoire.");
+      return;
+    }
+    if (pendingFile) {
+      processFile(pendingFile, supplierName.trim());
+      setPendingFile(null);
+    } else {
+      fileRef.current?.click();
+    }
+  };
+
+  return (
+    <div className="screen-center">
+      <div className="logo">Kelbongoo</div>
+      <div className="tag">Bonjour {operator} 👋</div>
+
+      <div className="card">
+        <h3 style={{margin: "0 0 12px 0", fontSize: 15}}>Démarrer un nouveau dispatch</h3>
+
+        <div className="field">
+          <label>Nom du fournisseur *</label>
+          <input
+            type="text"
+            value={supplierName}
+            onChange={(e) => { setSupplierName(e.target.value); setError(""); }}
+            placeholder="Ex: SYMBIOSE, GABORIT, TERRE D'OC..."
+            style={{textTransform: "uppercase"}}
+          />
+        </div>
+
+        <div
+          className="upload-zone"
+          onClick={() => {
+            if (!supplierName.trim()) {
+              setError("⚠️ Saisis d'abord le nom du fournisseur");
+              return;
+            }
+            fileRef.current?.click();
+          }}
+          style={{opacity: supplierName.trim() ? 1 : 0.5}}
+        >
+          <div className="icon">📥</div>
+          <div className="label">Charger le fichier Excel</div>
+          <div className="hint">.xlsx ou .xls</div>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xls"
+          style={{display: "none"}}
+          onChange={(e) => handleFileSelected(e.target.files[0])}
+        />
+        {error && <div style={{color: "#d32f2f", fontSize: 13, marginTop: 12}}>{error}</div>}
+      </div>
+
+      {activeSessions.length > 0 && (
+        <div className="card" style={{marginTop: 16}}>
+          <h3 style={{margin: "0 0 12px 0", fontSize: 15}}>Rejoindre un dispatch en cours</h3>
+          {activeSessions.map(s => (
+            <button
+              key={s.id}
+              className="btn-secondary"
+              style={{textAlign: "left", padding: 14, marginBottom: 6}}
+              onClick={() => onJoinSession(s.id)}
+            >
+              <div style={{fontWeight: 700, marginBottom: 2}}>{s.supplier}</div>
+              <div style={{fontSize: 11, color: "#666"}}>
+                Démarré à {fmtTime(s.startedAt)} • {s.done}/{s.total} produits faits
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isAdmin(operator) && (
+        <div style={{marginTop: 16, width: "100%", maxWidth: 360}}>
+          <button
+            className="btn-secondary"
+            onClick={onOpenAdmin}
+            style={{background: "#1a4d2e", color: "#fff", fontWeight: 700, padding: 14}}
+          >
+            🔐 Mode Admin
+          </button>
+          <button
+            className="btn-secondary"
+            onClick={openBdcModal}
+            style={{background: "#5e35b1", color: "#fff", fontWeight: 700, padding: 14, marginTop: 8}}
+          >
+            📋 Charger un BDC depuis Drive
+          </button>
+        </div>
+      )}
+
+      <div style={{marginTop: 12, width: "100%", maxWidth: 360}}>
+        {onBackToMode && (
+          <button
+            className="btn-secondary"
+            onClick={onBackToMode}
+            style={{fontSize: 13}}
+          >
+            ← Changer de mode
+          </button>
+        )}
+        {onReset && (
+          <button
+            className="btn-secondary"
+            onClick={onReset}
+            style={{fontSize: 13, color: "#c62828", borderColor: "#ffcdd2"}}
+          >
+            🔄 Réinitialiser (vider le cache)
+          </button>
+        )}
+        <button
+          className="btn-secondary"
+          onClick={onLogout}
+          style={{fontSize: 13, color: "#666"}}
+        >
+          ↪ Se déconnecter ({operator})
+        </button>
+      </div>
+
+      {!firebaseReady && (
+        <div style={{fontSize: 11, color: "#999", marginTop: 16, textAlign: "center", maxWidth: 360}}>
+          ⚠️ Firebase non configuré. Mode local uniquement (pas de partage temps réel).
+        </div>
+      )}
+
+      {/* Modal de chargement BDC */}
+      {showBdcModal && (
+        <div className="modal-backdrop" onClick={() => !loadingBdcId && setShowBdcModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{maxWidth: 500}}>
+            <h3>📋 Charger un BDC depuis Drive</h3>
+            <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
+              BDC des 3 derniers jours dans le dossier Drive Kelbongoo.
+            </p>
+
+            <div className="field">
+              <label>Nom du fournisseur *</label>
+              <input
+                type="text"
+                value={bdcSupplier}
+                onChange={(e) => { setBdcSupplier(e.target.value); setBdcError(""); }}
+                placeholder="Ex: LE FLEURY"
+                style={{textTransform: "uppercase"}}
+              />
+            </div>
+
+            {bdcLoading && (
+              <div style={{textAlign: "center", padding: 20, color: "#666"}}>
+                Chargement de la liste...
+              </div>
+            )}
+
+            {!bdcLoading && bdcList.length > 0 && (
+              <div style={{maxHeight: 400, overflowY: "auto", marginBottom: 12}}>
+                {bdcList.map(bdc => (
+                  <button
+                    key={bdc.id}
+                    onClick={() => loadBdc(bdc)}
+                    disabled={loadingBdcId !== null}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: 12,
+                      marginBottom: 6,
+                      background: loadingBdcId === bdc.id ? "#e8f5e9" : "#f4f5f7",
+                      border: "1.5px solid " + (loadingBdcId === bdc.id ? "#1a4d2e" : "#e6e8ec"),
+                      borderRadius: 8,
+                      cursor: loadingBdcId !== null ? "wait" : "pointer",
+                      opacity: loadingBdcId !== null && loadingBdcId !== bdc.id ? 0.5 : 1
+                    }}
+                  >
+                    <div style={{fontWeight: 700, fontSize: 13, marginBottom: 2}}>
+                      {loadingBdcId === bdc.id ? "⏳ " : "📄 "}{bdc.name}
+                    </div>
+                    <div style={{fontSize: 11, color: "#666"}}>
+                      Modifié le {bdc.modifiedStr}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {bdcError && (
+              <div style={{
+                color: "#c62828",
+                background: "#ffebee",
+                padding: 10,
+                borderRadius: 6,
+                fontSize: 12,
+                marginBottom: 12
+              }}>
+                {bdcError}
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button
+                className="btn-cancel"
+                onClick={() => setShowBdcModal(false)}
+                disabled={loadingBdcId !== null}
+              >
+                Annuler
+              </button>
+              <button
+                className="btn-confirm"
+                onClick={openBdcModal}
+                disabled={bdcLoading || loadingBdcId !== null}
+              >
+                🔄 Actualiser
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductCard({ product, pkey, status, operator, storeColumns, onLock, onUnlock, onValidate, onUndo, onEdit }) {
+  const isLocked = status.lockedBy && status.lockedBy !== operator;
+  const lockExpired = status.lockedAt && (Date.now() - status.lockedAt) > LOCK_DURATION_MS;
+  const reallyLocked = isLocked && !lockExpired;
+  const isDone = status.done;
+  const isMine = status.lockedBy === operator && !lockExpired;
+
+  // Quantités effectives (peuvent avoir été modifiées via le modal)
+  // status.qtyStores = { CODE: qty, ... }  ou ancien format status.qtyRob/Tol/Pdp
+  const getQty = (code) => {
+    if (status.qtyStores && status.qtyStores[code] !== undefined) {
+      return status.qtyStores[code];
+    }
+    // Fallback : la valeur initiale du produit (parsée du fichier)
+    return (product.stores && product.stores[code]) || 0;
+  };
+  const recue = status.qtyRecue !== undefined ? status.qtyRecue : product.recue;
+
+  // Construit le map de quantités effectives pour la validation
+  const effectiveQtyStores = {};
+  storeColumns.forEach(s => {
+    effectiveQtyStores[s.code] = getQty(s.code);
+  });
+
+  const cls = `product-card ${isDone ? "done" : ""} ${reallyLocked ? "locked" : ""} ${isMine ? "mine" : ""}`;
+
+  const handleClaim = () => {
+    if (isDone || reallyLocked) return;
+    if (isMine) {
+      onUnlock(pkey);
+    } else {
+      onLock(pkey);
+    }
+  };
+
+  // Grille adaptative : 3 cols si <=3 magasins, 2 cols sinon
+  const nbStores = storeColumns.length;
+  const gridCols = nbStores <= 3 ? `repeat(${nbStores}, 1fr)` : "repeat(2, 1fr)";
+
+  return (
+    <div className={cls}>
+      {reallyLocked && (
+        <div className="lock-badge">🔒 {status.lockedBy} s'en occupe</div>
+      )}
+      {isMine && !isDone && (
+        <div className="lock-badge" style={{background: "#1a4d2e"}}>
+          ✋ Tu t'en occupes (tape à nouveau le nom pour libérer)
+        </div>
+      )}
+      {isDone && (
+        <div className="done-badge">
+          ✓ {status.doneBy} • {fmtTime(status.doneAt)}
+        </div>
+      )}
+
+      <div
+        className="designation"
+        onClick={handleClaim}
+        style={{
+          cursor: (!isDone && !reallyLocked) ? "pointer" : "default",
+          userSelect: "none"
+        }}
+      >
+        {product.designation}
+      </div>
+
+      <div className="product-meta">
+        {product.article && <span className="article">{product.article}</span>}
+        <span className="recu">Reçu: {recue}</span>
+        {!isDone && !reallyLocked && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(pkey, true); }}
+            style={{
+              background: "#fff3e0", border: "1px solid #ffcc80",
+              borderRadius: 4, padding: "2px 6px", fontSize: 10,
+              color: "#e65100", fontWeight: 700, cursor: "pointer"
+            }}
+          >
+            ✎ Modifier reçu
+          </button>
+        )}
+      </div>
+
+      {/* Sur la carte : on masque les locaux à 0 pour ne montrer que ce qui est à dispatcher.
+          Le modal d'édition (EditModal) affiche toujours tous les locaux. */}
+      {(() => {
+        const visibleCols = storeColumns.filter(s => effectiveQtyStores[s.code] > 0);
+        const displayCols = visibleCols.length > 0 ? visibleCols : storeColumns; // fallback : tout afficher si tout est à 0
+        const gridCols2 = `repeat(${displayCols.length}, 1fr)`;
+        return (
+          <div className="dest-row" style={{gridTemplateColumns: gridCols2}}>
+            {displayCols.map(s => {
+              const q = effectiveQtyStores[s.code];
+              return (
+                <div className="dest-cell" key={s.code}>
+                  <div className="name">{s.label}</div>
+                  <div className="qty">{q}</div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {!isDone && !reallyLocked && (
+        <div className="actions-row">
+          <button
+            className="btn-validate"
+            onClick={() => onValidate(pkey, { qtyStores: effectiveQtyStores, qtyRecue: recue })}
+          >
+            ✓ Dispatché
+          </button>
+          <button className="btn-edit" onClick={() => onEdit(pkey, false)}>
+            ✎
+          </button>
+        </div>
+      )}
+
+      {isDone && (
+        <div className="actions-row">
+          <button className="btn-undo" onClick={() => onUndo(pkey)}>
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {reallyLocked && (
+        <div style={{fontSize: 12, color: "#888", textAlign: "center", padding: "8px 0"}}>
+          {status.lockedBy} est en train de s'en occuper...
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditModal({ product, status, storeColumns, onSave, onClose, allowReceivedEdit }) {
+  // Quantités par magasin en string pour gérer la saisie
+  const getInitial = (code) => {
+    if (status.qtyStores && status.qtyStores[code] !== undefined) return String(status.qtyStores[code]);
+    if (code === "ROB" && status.qtyRob !== undefined) return String(status.qtyRob);
+    if (code === "TOL" && status.qtyTol !== undefined) return String(status.qtyTol);
+    if (code === "PDP" && status.qtyPdp !== undefined) return String(status.qtyPdp);
+    return String((product.stores && product.stores[code]) || 0);
+  };
+
+  const [qties, setQties] = useState(() => {
+    const init = {};
+    storeColumns.forEach(s => { init[s.code] = getInitial(s.code); });
+    return init;
+  });
+  const [recue, setRecue] = useState(String(status.qtyRecue !== undefined ? status.qtyRecue : product.recue));
+
+  const toNum = (s) => {
+    if (s === "" || s === null || s === undefined) return 0;
+    const n = parseInt(s, 10);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const handleNumChange = (code) => (e) => {
+    const v = e.target.value;
+    if (v === "" || /^\d+$/.test(v)) {
+      setQties(prev => ({ ...prev, [code]: v }));
+    }
+  };
+
+  const handleRecueChange = (e) => {
+    const v = e.target.value;
+    if (v === "" || /^\d+$/.test(v)) setRecue(v);
+  };
+
+  const recueN = toNum(recue);
+  let total = 0;
+  const numQties = {};
+  storeColumns.forEach(s => {
+    const n = toNum(qties[s.code]);
+    numQties[s.code] = n;
+    total += n;
+  });
+  const gap = total - recueN;
+
+  const handleSave = () => {
+    onSave({ qtyStores: numQties, qtyRecue: recueN });
+  };
+
+  // Adapte la grille selon nombre de magasins
+  const nbStores = storeColumns.length;
+  const gridCols = nbStores <= 3 ? `repeat(${nbStores}, 1fr)` : "repeat(2, 1fr)";
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Ajuster les quantités</h3>
+        <div className="designation-modal">{product.designation}</div>
+
+        {allowReceivedEdit && (
+          <div style={{
+            background: "#fff3e0", padding: 10, borderRadius: 8,
+            marginBottom: 12, border: "1px solid #ffcc80"
+          }}>
+            <div style={{fontSize: 11, fontWeight: 700, color: "#e65100", marginBottom: 4}}>
+              QUANTITÉ REÇUE (BL)
+            </div>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={recue}
+              onChange={handleRecueChange}
+              onFocus={(e) => e.target.select()}
+              style={{
+                width: "100%", padding: 10, fontSize: 22, fontWeight: 700,
+                textAlign: "center", border: "1.5px solid #ff9800",
+                borderRadius: 6, background: "#fff"
+              }}
+            />
+            <div style={{fontSize: 10, color: "#666", marginTop: 4, textAlign: "center"}}>
+              Initial: {product.recue}
+            </div>
+          </div>
+        )}
+
+        <div style={{fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 6}}>
+          RÉPARTITION PAR MAGASIN
+        </div>
+        <div className="edit-grid" style={{gridTemplateColumns: gridCols}}>
+          {storeColumns.map(s => (
+            <div className="edit-cell" key={s.code}>
+              <label>{s.label}</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={qties[s.code]}
+                onChange={handleNumChange(s.code)}
+                onFocus={(e) => e.target.select()}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div style={{
+          fontSize: 12, marginBottom: 12, textAlign: "center",
+          padding: 8, borderRadius: 6,
+          background: gap === 0 ? "#e8f5e9" : "#ffebee",
+          color: gap === 0 ? "#1a4d2e" : "#c62828",
+          fontWeight: 600
+        }}>
+          Total réparti: {total} / Reçu: {recueN}
+          {gap !== 0 && (
+            <div style={{fontSize: 11, marginTop: 2}}>
+              {gap > 0 ? `⚠️ Surplus de ${gap}` : `⚠️ Manque ${-gap}`}
+            </div>
+          )}
+          {gap === 0 && <div style={{fontSize: 11, marginTop: 2}}>✓ Total cohérent</div>}
+        </div>
+
+        <div className="modal-actions">
+          <button className="btn-cancel" onClick={onClose}>Annuler</button>
+          <button className="btn-confirm" onClick={handleSave}>
+            Valider
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DispatchScreen({ sessionId, operator, supplier, products, storeColumns, onFinish, onLeave }) {
+  const { state, meta, connected, lockRow, unlockRow, validateRow, undoRow } = useFirebaseSession(sessionId, operator);
+  const [search, setSearch] = useState("");
+  const [editingKey, setEditingKey] = useState(null);
+  const [toast, setToast] = useState("");
+  const [viewMode, setViewMode] = useState(localStorage.getItem("dispatch_view_mode") || "list"); // "list" | "scan"
+  const [showDone, setShowDone] = useState(false); // onglet Dispatchés
+  const searchInputRef = useRef(null);
+
+  // FALLBACK CRITIQUE : si storeColumns est vide (vieille session, ou erreur),
+  // on les reconstruit depuis les produits.
+  // - Priorité 1 : storeColumns de la session Firebase (meta.storeColumns)
+  // - Priorité 2 : storeColumns passé en prop
+  // - Priorité 3 : reconstruit depuis les clés de products[0].stores
+  // - Priorité 4 (compat ancien format): ROB/TOL/PDP par défaut si produits ont rob/tol/pdp
+  const effectiveStoreColumns = useMemo(() => {
+    // 1. Firebase meta
+    if (meta && Array.isArray(meta.storeColumns) && meta.storeColumns.length > 0) {
+      return meta.storeColumns;
+    }
+    // 2. Prop
+    if (Array.isArray(storeColumns) && storeColumns.length > 0) {
+      return storeColumns;
+    }
+    // 3. Reconstruction depuis products[0].stores
+    if (products.length > 0 && products[0].stores) {
+      return Object.keys(products[0].stores).map(code => ({
+        code,
+        label: code,
+        needsNaming: false
+      }));
+    }
+    // 4. Compat ancien format (rob/tol/pdp directement sur le produit)
+    if (products.length > 0 && (products[0].rob !== undefined ||
+        products[0].tol !== undefined || products[0].pdp !== undefined)) {
+      return [
+        { code: "ROB", label: "ROB", needsNaming: false },
+        { code: "TOL", label: "TOL", needsNaming: false },
+        { code: "PDP", label: "PDP", needsNaming: false }
+      ];
+    }
+    return [];
+  }, [meta, storeColumns, products]);
+
+  // Adapte les produits pour qu'ils aient TOUS un champ `stores` (compat ancien format)
+  const normalizedProducts = useMemo(() => {
+    return products.map(p => {
+      if (p.stores) return p;
+      // Compat : si rob/tol/pdp directement → on construit stores
+      const stores = {};
+      if (p.rob !== undefined) stores["ROB"] = p.rob;
+      if (p.tol !== undefined) stores["TOL"] = p.tol;
+      if (p.pdp !== undefined) stores["PDP"] = p.pdp;
+      return { ...p, stores };
+    });
+  }, [products]);
+
+  // Sauvegarde le mode choisi
+  useEffect(() => {
+    localStorage.setItem("dispatch_view_mode", viewMode);
+  }, [viewMode]);
+
+  // Renouvelle le lock toutes les 10s sur les lignes que je tiens
+  useEffect(() => {
+    const t = setInterval(() => {
+      Object.entries(state).forEach(([k, v]) => {
+        if (v && v.lockedBy === operator && !v.done) {
+          lockRow(k);
+        }
+      });
+    }, LOCK_REFRESH_MS);
+    return () => clearInterval(t);
+  }, [state, operator, lockRow]);
+
+  // Tri alphabétique - utilise normalizedProducts pour garantir le champ stores
+  const sortedProducts = useMemo(() => {
+    return normalizedProducts
+      .map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }))
+      .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
+  }, [normalizedProducts]);
+
+  // Sépare les produits dispatchés des non dispatchés
+  const { notDoneProducts, doneProducts } = useMemo(() => {
+    const notDone = [];
+    const done = [];
+    sortedProducts.forEach(p => {
+      if (state[p._pkey]?.done) done.push(p);
+      else notDone.push(p);
+    });
+    return { notDoneProducts: notDone, doneProducts: done };
+  }, [sortedProducts, state]);
+
+  // Filtre par recherche selon l'onglet actif
+  const filtered = useMemo(() => {
+    const source = showDone ? doneProducts : notDoneProducts;
+    if (!search.trim()) return source;
+    const q = stripAccents(search.toLowerCase());
+    return source.filter(p =>
+      stripAccents(p.designation.toLowerCase()).includes(q) ||
+      (p.article || "").includes(q)
+    );
+  }, [notDoneProducts, doneProducts, showDone, search]);
+
+  const stats = useMemo(() => {
+    const total = sortedProducts.length;
+    const done = sortedProducts.filter(p => state[p._pkey]?.done).length;
+    return { total, done, remaining: total - done };
+  }, [sortedProducts, state]);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 1500);
+  };
+
+  const handleValidate = (pkey, qtys) => {
+    validateRow(pkey, qtys);
+    showToast("✓ Validé");
+  };
+
+  const handleUndo = (pkey) => {
+    undoRow(pkey);
+    showToast("↶ Annulé");
+  };
+
+  // editMode peut être true = on autorise aussi la modif de la quantité reçue
+  const [editAllowReceived, setEditAllowReceived] = useState(false);
+  const handleEdit = (pkey, allowReceivedEdit) => {
+    lockRow(pkey);
+    setEditAllowReceived(!!allowReceivedEdit);
+    setEditingKey(pkey);
+  };
+
+  const handleEditSave = (qtys) => {
+    if (editingKey) {
+      validateRow(editingKey, qtys);
+      showToast("✓ Ajusté et validé");
+    }
+    setEditingKey(null);
+  };
+
+  const handleEditCancel = () => {
+    if (editingKey) unlockRow(editingKey);
+    setEditingKey(null);
+  };
+
+  const editingProduct = editingKey ? sortedProducts.find(p => p._pkey === editingKey) : null;
+
+  // Quand on est en mode scan et qu'on valide, on vide la recherche pour le prochain produit
+  const handleValidateScan = (pkey, qtys) => {
+    handleValidate(pkey, qtys);
+    if (viewMode === "scan") {
+      setSearch("");
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    }
+  };
+
+  // Re-télécharge un xlsx reconstruit depuis les données en mémoire
+  const downloadBdc = () => {
+    const header = ["Article", "Désignation", "Quantité reçue", ...storeColumns.map(s => s.label)];
+    const dataRows = sortedProducts.map(p => [
+      p.article || "",
+      p.designation || "",
+      p.received ?? "",
+      ...storeColumns.map(s => p.stores?.[s.code] ?? 0)
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Dispatch");
+    const clean = (s) => (s || "").replace(/[^a-zA-Z0-9_\-]/g, "_");
+    XLSX.writeFile(wb, `Dispatch_${clean(supplier)}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  return (
+    <div className="app">
+      <div className="header">
+        <div className="header-row">
+          <div>
+            <h1>{supplier}</h1>
+            <div className="sub">
+              {operator} • <span className={`conn-status ${!connected ? "offline" : ""}`}>
+                {connected ? "● en ligne" : "● hors ligne"}
+              </span>
+            </div>
+          </div>
+          <div className="header-actions">
+            <button
+              className="header-btn"
+              onClick={downloadBdc}
+              title="Re-télécharger le fichier"
+              style={{background: "rgba(255,255,255,.15)"}}
+            >
+              ⬇ BL
+            </button>
+            <button
+              className="header-btn"
+              onClick={() => setViewMode(viewMode === "list" ? "scan" : "list")}
+              style={{background: viewMode === "scan" ? "#ffb300" : "rgba(255,255,255,.15)"}}
+            >
+              {viewMode === "scan" ? "📋 Mode liste" : "⚡ Mode scan"}
+            </button>
+            <button className="header-btn" onClick={onLeave}>Quitter</button>
+          </div>
+        </div>
+        <div className="progress-bar">
+          <div className="progress-fill" style={{width: `${stats.total > 0 ? (stats.done/stats.total)*100 : 0}%`}}></div>
+        </div>
+        <div className="progress-text" style={{color: "rgba(255,255,255,.85)"}}>
+          <span>{stats.done} / {stats.total} produits</span>
+          <span>{stats.remaining} restants</span>
+        </div>
+      </div>
+
+      {/* Onglets À faire / Dispatchés */}
+      <div className="tabs-bar">
+        <button
+          className={`tab ${!showDone ? "active" : ""}`}
+          onClick={() => { setShowDone(false); setSearch(""); }}
+        >
+          À faire ({notDoneProducts.length})
+        </button>
+        <button
+          className={`tab ${showDone ? "active" : ""}`}
+          onClick={() => { setShowDone(true); setSearch(""); }}
+        >
+          ✓ Dispatchés ({doneProducts.length})
+        </button>
+      </div>
+
+      {/* Mode SCAN : recherche géante centrée, peu de résultats */}
+      {viewMode === "scan" && !showDone && (
+        <div className="scan-mode">
+          <div className="scan-search-wrap">
+            <input
+              ref={searchInputRef}
+              className="scan-search-input"
+              type="text"
+              placeholder="Tape 2-3 lettres..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            {search && (
+              <button className="scan-clear" onClick={() => { setSearch(""); searchInputRef.current?.focus(); }}>
+                ✕
+              </button>
+            )}
+          </div>
+
+          {!search.trim() && (
+            <div className="scan-hint">
+              <div style={{fontSize: 40, marginBottom: 8}}>⚡</div>
+              <div style={{fontWeight: 600, marginBottom: 4}}>Mode scan rapide</div>
+              <div style={{fontSize: 13, color: "#666"}}>
+                Tape les premières lettres du produit que tu tiens dans la main
+              </div>
+              <div style={{fontSize: 12, color: "#999", marginTop: 12}}>
+                {notDoneProducts.length} produits restants
+              </div>
+            </div>
+          )}
+
+          {search.trim() && filtered.length === 0 && (
+            <div className="scan-hint">
+              <div style={{fontSize: 30, marginBottom: 8}}>🔍</div>
+              <div style={{color: "#999"}}>Aucun produit ne correspond à "<b>{search}</b>"</div>
+              <div style={{fontSize: 12, color: "#aaa", marginTop: 8}}>
+                Vérifie l'orthographe ou bascule en mode liste
+              </div>
+            </div>
+          )}
+
+          {search.trim() && filtered.length > 0 && (
+            <div className="scan-results">
+              {filtered.slice(0, 5).map(p => (
+                <ProductCard
+                  key={p._pkey}
+                  product={p}
+                  pkey={p._pkey}
+                  status={state[p._pkey] || {}}
+                  operator={operator}
+                  storeColumns={effectiveStoreColumns}
+                  onLock={lockRow}
+                  onUnlock={unlockRow}
+                  onValidate={handleValidateScan}
+                  onUndo={handleUndo}
+                  onEdit={handleEdit}
+                />
+              ))}
+              {filtered.length > 5 && (
+                <div style={{textAlign: "center", color: "#999", fontSize: 12, padding: 8}}>
+                  + {filtered.length - 5} autres résultats... précise ta recherche
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mode LISTE classique ou onglet Dispatchés */}
+      {(viewMode === "list" || showDone) && (
+        <>
+          <div className="search-bar">
+            <input
+              type="text"
+              placeholder={showDone ? "🔍 Chercher dans les dispatchés..." : "🔍 Chercher un produit..."}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="product-list">
+            {filtered.length === 0 && (
+              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
+                {showDone
+                  ? (search.trim() ? "Aucun résultat" : "Aucun produit dispatché pour l'instant")
+                  : (search.trim() ? "Aucun résultat" : "🎉 Tous les produits sont dispatchés !")
+                }
+              </div>
+            )}
+            {filtered.map(p => (
+              <ProductCard
+                key={p._pkey}
+                product={p}
+                pkey={p._pkey}
+                status={state[p._pkey] || {}}
+                operator={operator}
+                storeColumns={effectiveStoreColumns}
+                onLock={lockRow}
+                onUnlock={unlockRow}
+                onValidate={handleValidate}
+                onUndo={handleUndo}
+                onEdit={handleEdit}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="bottom-bar">
+        <div className="stats">
+          <span>Avancement: <b>{stats.done}/{stats.total}</b></span>
+          <span>{stats.total > 0 ? Math.round((stats.done/stats.total)*100) : 0}%</span>
+        </div>
+        <button
+          className="btn-finish"
+          onClick={() => onFinish(state, sortedProducts)}
+          disabled={stats.done === 0}
+        >
+          {stats.done === stats.total ? "✓ Terminer et envoyer le récap" : `Voir le récap (${stats.done} validés)`}
+        </button>
+      </div>
+
+      {editingProduct && (
+        <EditModal
+          product={editingProduct}
+          status={state[editingKey] || {}}
+          storeColumns={effectiveStoreColumns}
+          allowReceivedEdit={editAllowReceived}
+          onSave={handleEditSave}
+          onClose={handleEditCancel}
+        />
+      )}
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+function RecapScreen({ sessionId, operator, supplier, products, storeColumns, state, onClose, onLeave }) {
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+
+  // Analyse
+  const analysis = useMemo(() => {
+    const total = products.length;
+    const done = products.filter(p => state[p._pkey]?.done).length;
+    const notDone = products.filter(p => !state[p._pkey]?.done);
+
+    // Timestamps
+    const timestamps = products
+      .map(p => state[p._pkey]?.doneAt)
+      .filter(t => t)
+      .sort((a,b) => a - b);
+    const startedAt = timestamps[0];
+    const endedAt = timestamps[timestamps.length - 1];
+    const duration = startedAt && endedAt ? (endedAt - startedAt) : 0;
+
+    // Stats par opérateur
+    const byOp = {};
+    products.forEach(p => {
+      const s = state[p._pkey];
+      if (s?.done && s.doneBy) {
+        byOp[s.doneBy] = (byOp[s.doneBy] || 0) + 1;
+      }
+    });
+
+    // Helpers pour accéder aux qty effectives par store
+    const getEffectiveQty = (state, p, code) => {
+      const s = state[p._pkey];
+      if (!s) return (p.stores && p.stores[code]) || 0;
+      if (s.qtyStores && s.qtyStores[code] !== undefined) return s.qtyStores[code];
+      return (p.stores && p.stores[code]) || 0;
+    };
+
+    // Ajustements (quantités modifiées)
+    const adjusted = products.filter(p => {
+      const s = state[p._pkey];
+      if (!s?.done) return false;
+      // Quantité reçue modifiée ?
+      if (s.qtyRecue !== undefined && s.qtyRecue !== p.recue) return true;
+      // Au moins un magasin modifié ?
+      for (const sc of storeColumns) {
+        const initial = (p.stores && p.stores[sc.code]) || 0;
+        const effective = getEffectiveQty(state, p, sc.code);
+        if (effective !== initial) return true;
+      }
+      return false;
+    });
+
+    return { total, done, notDone, startedAt, endedAt, duration, byOp, adjusted, getEffectiveQty };
+  }, [products, state, storeColumns]);
+
+  const sendRecap = async () => {
+    setSending(true);
+    setError("");
+
+    const payload = {
+      action: "log-dispatch-recap",
+      sessionId,
+      supplier,
+      operator,
+      startedAt: analysis.startedAt ? new Date(analysis.startedAt).toISOString() : null,
+      endedAt: analysis.endedAt ? new Date(analysis.endedAt).toISOString() : null,
+      durationMs: analysis.duration,
+      total: analysis.total,
+      done: analysis.done,
+      notDone: analysis.notDone.length,
+      byOperator: analysis.byOp,
+      storeColumns: storeColumns, // expose la liste des sites dynamiques
+      lines: products.map(p => {
+        const s = state[p._pkey] || {};
+        // Construit les maps stores prévu/réel
+        const stores_prevu = {};
+        const stores_reel = {};
+        for (const sc of storeColumns) {
+          stores_prevu[sc.code] = (p.stores && p.stores[sc.code]) || 0;
+          stores_reel[sc.code] = analysis.getEffectiveQty(state, p, sc.code);
+        }
+        // Compat ancienne version : on remplit aussi rob/tol/pdp si présents
+        const robPrevu = stores_prevu["ROB"] || 0;
+        const tolPrevu = stores_prevu["TOL"] || 0;
+        const pdpPrevu = stores_prevu["PDP"] || 0;
+        const robReel = stores_reel["ROB"] || 0;
+        const tolReel = stores_reel["TOL"] || 0;
+        const pdpReel = stores_reel["PDP"] || 0;
+        return {
+          article: p.article,
+          designation: p.designation,
+          recue_initiale: p.recue,
+          recue: s.qtyRecue !== undefined ? s.qtyRecue : p.recue,
+          // Compat
+          rob_prevu: robPrevu, tol_prevu: tolPrevu, pdp_prevu: pdpPrevu,
+          rob_reel: robReel, tol_reel: tolReel, pdp_reel: pdpReel,
+          // Nouveau : map complet
+          stores_prevu, stores_reel,
+          done: !!s.done,
+          doneBy: s.doneBy || "",
+          doneAt: s.doneAt ? new Date(s.doneAt).toISOString() : ""
+        };
+      })
+    };
+
+    try {
+      // Apps Script en mode no-cors car redirection
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(payload)
+      });
+      setSent(true);
+    } catch (e) {
+      setError(`Erreur: ${e.message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="app">
+      <div className="header">
+        <div className="header-row">
+          <div>
+            <h1>Récap dispatch</h1>
+            <div className="sub">{supplier}</div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn" onClick={onClose}>← Retour</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="recap-section">
+        <div className="recap-card">
+          <h3>📊 Avancement</h3>
+          <div className="recap-stat">
+            <span className="label">Produits totaux</span>
+            <span className="value">{analysis.total}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Dispatchés</span>
+            <span className="value">{analysis.done}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Non traités</span>
+            <span className="value" style={{color: analysis.notDone.length > 0 ? "#d32f2f" : "#1a4d2e"}}>
+              {analysis.notDone.length}
+            </span>
+          </div>
+        </div>
+
+        <div className="recap-card">
+          <h3>⏱ Temps</h3>
+          <div className="recap-stat">
+            <span className="label">Début</span>
+            <span className="value">{fmtTime(analysis.startedAt)}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Fin</span>
+            <span className="value">{fmtTime(analysis.endedAt)}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Durée totale</span>
+            <span className="value">{fmtDuration(analysis.duration)}</span>
+          </div>
+          {analysis.done > 0 && analysis.duration > 0 && (
+            <div className="recap-stat">
+              <span className="label">Cadence</span>
+              <span className="value">
+                {(analysis.done / (analysis.duration / 60000)).toFixed(1)} produits/min
+              </span>
+            </div>
+          )}
+        </div>
+
+        {Object.keys(analysis.byOp).length > 0 && (
+          <div className="recap-card">
+            <h3>👥 Par opérateur</h3>
+            {Object.entries(analysis.byOp)
+              .sort((a,b) => b[1] - a[1])
+              .map(([name, count]) => (
+                <div className="recap-stat" key={name}>
+                  <span className="label">{name}</span>
+                  <span className="value">{count} produits</span>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {analysis.notDone.length > 0 && (
+          <div className="recap-card">
+            <h3>⚠️ Non traités ({analysis.notDone.length})</h3>
+            {analysis.notDone.map(p => (
+              <div className="anomaly-item" key={p._pkey}>
+                <div className="product">{p.designation}</div>
+                <div className="detail">
+                  Reçu: {p.recue} •{" "}
+                  {storeColumns.map((sc, i) => (
+                    <span key={sc.code}>
+                      {i > 0 ? " / " : ""}{sc.label} {(p.stores && p.stores[sc.code]) || 0}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {analysis.adjusted.length > 0 && (
+          <div className="recap-card">
+            <h3>✎ Quantités ajustées ({analysis.adjusted.length})</h3>
+            {analysis.adjusted.map(p => {
+              const s = state[p._pkey];
+              const prevu = storeColumns.map(sc => `${sc.label} ${(p.stores && p.stores[sc.code]) || 0}`).join(" / ");
+              const reel = storeColumns.map(sc => `${sc.label} ${analysis.getEffectiveQty(state, p, sc.code)}`).join(" / ");
+              return (
+                <div className="anomaly-item" key={p._pkey}>
+                  <div className="product">{p.designation}</div>
+                  <div className="detail">
+                    Prévu: {prevu}<br/>
+                    Réel: {reel}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="recap-card">
+          <h3>📤 Envoyer le récap</h3>
+          {!sent && (
+            <button
+              className="btn-primary"
+              onClick={sendRecap}
+              disabled={sending}
+            >
+              {sending ? "Envoi en cours..." : "Envoyer au Google Sheet"}
+            </button>
+          )}
+          {sent && (
+            <div style={{padding: 12, background: "#e8f5e9", borderRadius: 8, color: "#1a4d2e", fontWeight: 600, textAlign: "center"}}>
+              ✓ Envoyé !
+            </div>
+          )}
+          {error && (
+            <div style={{padding: 12, background: "#ffebee", borderRadius: 8, color: "#c62828", fontSize: 13, marginTop: 8}}>
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="recap-card">
+          <h3>📄 Bons de Livraison PDF</h3>
+          <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
+            Génère un BL par site/magasin à imprimer ou envoyer.
+          </p>
+          {(() => {
+            const sessionLike = {
+              id: sessionId,
+              supplier,
+              startedAt: analysis.startedAt,
+              createdBy: operator,
+              operators: Object.keys(analysis.byOp || {}),
+              state
+            };
+            // Filtre les magasins actifs (avec au moins 1 unité)
+            const activeStores = storeColumns.filter(sc => {
+              let total = 0;
+              products.forEach(p => {
+                const q = analysis.getEffectiveQty(state, p, sc.code);
+                total += q;
+              });
+              return total > 0;
+            });
+            return (
+              <>
+                <button
+                  className="btn-primary"
+                  onClick={() => generateAllBLs(sessionLike, products, storeColumns)}
+                  style={{marginBottom: 8}}
+                >
+                  📥 Télécharger tous les BL ({activeStores.length})
+                </button>
+                <div style={{display: "grid", gridTemplateColumns: `repeat(${Math.min(activeStores.length, 3)}, 1fr)`, gap: 6}}>
+                  {activeStores.map(sc => (
+                    <button
+                      key={sc.code}
+                      className="btn-secondary"
+                      onClick={() => generateBL(sessionLike, products, sc.code, storeColumns)}
+                    >
+                      {sc.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+
+        <div className="recap-card">
+          <button
+            className="btn-secondary"
+            onClick={onLeave}
+            style={{background: "#1a4d2e", color: "#fff", fontWeight: 600}}
+          >
+            ← Quitter et revenir à l'accueil
+          </button>
+          <p style={{fontSize: 11, color: "#999", margin: "8px 0 0 0", textAlign: "center"}}>
+            Les données du dispatch restent disponibles dans le mode Admin.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   ADMIN SCREEN
+   ========================================================================= */
+
+function AdminScreen({ operator, onClose, onViewSession }) {
+  const [allSessions, setAllSessions] = useState([]);
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState("live"); // live | history | stats
+  const [loading, setLoading] = useState(true);
+
+  // Suppression d'une session
+  const handleDeleteSession = (s) => {
+    const msg = s.isLive
+      ? `⚠️ Annuler la session EN COURS "${s.supplier}" ?\n\nLes opérateurs perdront leur travail.`
+      : `Supprimer la session "${s.supplier}" du ${new Date(s.startedAt).toLocaleString("fr-FR")} ?`;
+    if (!confirm(msg)) return;
+    if (firebaseReady) {
+      db.ref(`dispatch/${s.id}`).remove().catch(err => alert("Erreur: " + err.message));
+    }
+  };
+
+  // Suppression en masse de toutes les sessions visibles dans l'onglet courant
+  const handleBulkDelete = (sessions, label) => {
+    if (sessions.length === 0) return;
+    if (!confirm(`⚠️ Supprimer ${sessions.length} session(s) ${label} ?\n\nCette action est irréversible.`)) return;
+    if (!confirm(`Confirmer la suppression de ${sessions.length} session(s) ?`)) return;
+    if (!firebaseReady) return;
+
+    const updates = {};
+    sessions.forEach(s => { updates[s.id] = null; });
+    db.ref("dispatch").update(updates).catch(err => alert("Erreur: " + err.message));
+  };
+
+  // Charge toutes les sessions
+  useEffect(() => {
+    if (!firebaseReady) {
+      setLoading(false);
+      return;
+    }
+    const ref = db.ref("dispatch");
+    const handler = (snap) => {
+      const all = snap.val() || {};
+      const list = [];
+      Object.entries(all).forEach(([sid, s]) => {
+        if (!s.meta) return;
+        const products = s.meta.products || [];
+        const state = s.state || {};
+        const total = products.length;
+        const done = Object.values(state).filter(x => x && x.done).length;
+
+        // Calcule la durée si fini
+        const timestamps = Object.values(state)
+          .filter(x => x && x.doneAt)
+          .map(x => x.doneAt)
+          .sort((a,b) => a - b);
+        const firstDone = timestamps[0];
+        const lastDone = timestamps[timestamps.length - 1];
+
+        // Opérateurs uniques
+        const ops = new Set();
+        Object.values(state).forEach(x => {
+          if (x && x.doneBy) ops.add(x.doneBy);
+        });
+
+        list.push({
+          id: sid,
+          supplier: s.meta.supplier || "?",
+          startedAt: s.meta.startedAt,
+          createdBy: s.meta.createdBy || "",
+          total,
+          done,
+          remaining: total - done,
+          // "Live" = pas encore terminé (peu importe depuis combien de temps)
+          isLive: total > 0 && done < total,
+          isFinished: done === total && total > 0,
+          firstDone,
+          lastDone,
+          durationMs: firstDone && lastDone ? (lastDone - firstDone) : 0,
+          operators: Array.from(ops),
+          products,
+          state,
+          meta: s.meta // contient storeColumns pour AdminSessionDetail
+        });
+      });
+      list.sort((a,b) => (b.startedAt || 0) - (a.startedAt || 0));
+      setAllSessions(list);
+      setLoading(false);
+    };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, []);
+
+  const liveSessions = useMemo(() => allSessions.filter(s => s.isLive), [allSessions]);
+  const historySessions = useMemo(() => allSessions.filter(s => !s.isLive), [allSessions]);
+
+  const filteredHistory = useMemo(() => {
+    if (!search.trim()) return historySessions;
+    const q = stripAccents(search.toLowerCase());
+    return historySessions.filter(s =>
+      stripAccents((s.supplier || "").toLowerCase()).includes(q) ||
+      stripAccents((s.createdBy || "").toLowerCase()).includes(q) ||
+      s.operators.some(o => stripAccents(o.toLowerCase()).includes(q))
+    );
+  }, [historySessions, search]);
+
+  // Stats globales
+  const stats = useMemo(() => {
+    const finished = allSessions.filter(s => s.isFinished && s.durationMs > 0);
+    const totalProducts = finished.reduce((sum, s) => sum + s.done, 0);
+    const totalMinutes = finished.reduce((sum, s) => sum + (s.durationMs / 60000), 0);
+    const avgCadence = totalMinutes > 0 ? (totalProducts / totalMinutes).toFixed(2) : 0;
+
+    // Par fournisseur
+    const bySupplier = {};
+    finished.forEach(s => {
+      if (!bySupplier[s.supplier]) bySupplier[s.supplier] = { count: 0, products: 0, durationMs: 0 };
+      bySupplier[s.supplier].count++;
+      bySupplier[s.supplier].products += s.done;
+      bySupplier[s.supplier].durationMs += s.durationMs;
+    });
+
+    // Par opérateur
+    const byOperator = {};
+    finished.forEach(s => {
+      Object.values(s.state).forEach(st => {
+        if (st && st.done && st.doneBy) {
+          byOperator[st.doneBy] = (byOperator[st.doneBy] || 0) + 1;
+        }
+      });
+    });
+
+    return {
+      totalSessions: allSessions.length,
+      finishedSessions: finished.length,
+      totalProducts,
+      avgCadence,
+      bySupplier,
+      byOperator
+    };
+  }, [allSessions]);
+
+  return (
+    <div className="app">
+      <div className="header" style={{background: "#0d3d20"}}>
+        <div className="header-row">
+          <div>
+            <h1>🔐 Mode Admin</h1>
+            <div className="sub">{operator} • {allSessions.length} session(s) total</div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn" onClick={onClose}>← Retour</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="tabs-bar">
+        <button className={`tab ${tab === "live" ? "active" : ""}`} onClick={() => setTab("live")}>
+          🔴 En cours ({liveSessions.length})
+        </button>
+        <button className={`tab ${tab === "history" ? "active" : ""}`} onClick={() => setTab("history")}>
+          📋 Historique ({historySessions.length})
+        </button>
+        <button className={`tab ${tab === "stats" ? "active" : ""}`} onClick={() => setTab("stats")}>
+          📊 Stats
+        </button>
+        <button className={`tab ${tab === "mu" ? "active" : ""}`} onClick={() => setTab("mu")}>
+          🥕 MU
+        </button>
+      </div>
+
+      <div style={{padding: 12, paddingBottom: 80}}>
+        {loading && <div style={{textAlign: "center", padding: 40, color: "#999"}}>Chargement...</div>}
+
+        {/* ----- ONGLET LIVE ----- */}
+        {tab === "live" && !loading && (
+          <>
+            {liveSessions.length === 0 && (
+              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
+                Aucun dispatch en cours actuellement
+              </div>
+            )}
+            {liveSessions.map(s => (
+              <AdminSessionCard
+                key={s.id}
+                session={s}
+                live={true}
+                onClick={() => onViewSession(s)}
+                onDelete={handleDeleteSession}
+              />
+            ))}
+            {liveSessions.length > 1 && (
+              <button
+                onClick={() => handleBulkDelete(liveSessions, "en cours")}
+                style={{
+                  width: "100%", padding: 10, marginTop: 12,
+                  background: "#ffebee", color: "#c62828",
+                  border: "1px solid #ffcdd2", borderRadius: 8,
+                  fontSize: 13, fontWeight: 600
+                }}
+              >
+                🗑 Annuler toutes les sessions en cours ({liveSessions.length})
+              </button>
+            )}
+          </>
+        )}
+
+        {/* ----- ONGLET HISTORIQUE ----- */}
+        {tab === "history" && !loading && (
+          <>
+            <div style={{marginBottom: 12}}>
+              <input
+                type="text"
+                placeholder="🔍 Chercher par fournisseur, opérateur..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{
+                  width: "100%", padding: 10, fontSize: 14,
+                  border: "1.5px solid #ddd", borderRadius: 8
+                }}
+              />
+            </div>
+            {filteredHistory.length === 0 && (
+              <div style={{textAlign: "center", padding: 40, color: "#999"}}>
+                {search ? "Aucun résultat" : "Aucune session terminée"}
+              </div>
+            )}
+            {filteredHistory.map(s => (
+              <AdminSessionCard
+                key={s.id}
+                session={s}
+                live={false}
+                onClick={() => onViewSession(s)}
+                onDelete={handleDeleteSession}
+              />
+            ))}
+            {filteredHistory.length > 1 && (
+              <button
+                onClick={() => handleBulkDelete(filteredHistory, search ? "filtrée(s)" : "de l'historique")}
+                style={{
+                  width: "100%", padding: 10, marginTop: 12,
+                  background: "#ffebee", color: "#c62828",
+                  border: "1px solid #ffcdd2", borderRadius: 8,
+                  fontSize: 13, fontWeight: 600
+                }}
+              >
+                🗑 Supprimer {search ? `les ${filteredHistory.length} sessions filtrées` : `toutes les sessions (${filteredHistory.length})`}
+              </button>
+            )}
+          </>
+        )}
+
+        {/* ----- ONGLET STATS ----- */}
+        {tab === "stats" && !loading && (
+          <>
+            <div className="recap-card">
+              <h3>📊 Vue d'ensemble</h3>
+              <div className="recap-stat">
+                <span className="label">Total sessions</span>
+                <span className="value">{stats.totalSessions}</span>
+              </div>
+              <div className="recap-stat">
+                <span className="label">Sessions terminées</span>
+                <span className="value">{stats.finishedSessions}</span>
+              </div>
+              <div className="recap-stat">
+                <span className="label">Produits dispatchés (total)</span>
+                <span className="value">{stats.totalProducts}</span>
+              </div>
+              <div className="recap-stat">
+                <span className="label">Cadence moyenne</span>
+                <span className="value">{stats.avgCadence} prod/min</span>
+              </div>
+            </div>
+
+            {Object.keys(stats.bySupplier).length > 0 && (
+              <div className="recap-card">
+                <h3>🏭 Par fournisseur</h3>
+                {Object.entries(stats.bySupplier)
+                  .sort((a,b) => b[1].count - a[1].count)
+                  .map(([name, s]) => {
+                    const cadence = s.durationMs > 0 ? (s.products / (s.durationMs / 60000)).toFixed(1) : "-";
+                    return (
+                      <div className="recap-stat" key={name}>
+                        <span className="label">
+                          <b>{name}</b>
+                          <div style={{fontSize: 11, color: "#999"}}>
+                            {s.count} session(s) • {s.products} prod • {cadence} prod/min
+                          </div>
+                        </span>
+                        <span className="value">{s.count}</span>
+                      </div>
+                    );
+                })}
+              </div>
+            )}
+
+            {Object.keys(stats.byOperator).length > 0 && (
+              <div className="recap-card">
+                <h3>👥 Par opérateur</h3>
+                {Object.entries(stats.byOperator)
+                  .sort((a,b) => b[1] - a[1])
+                  .map(([name, count]) => (
+                    <div className="recap-stat" key={name}>
+                      <span className="label">{name}</span>
+                      <span className="value">{count} produits</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ----- ONGLET MU ----- */}
+        {tab === "mu" && !loading && (
+          <MuAdminTab />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminSessionCard({ session, live, onClick, onDelete }) {
+  const s = session;
+  const progress = s.total > 0 ? (s.done / s.total) * 100 : 0;
+  const date = s.startedAt ? new Date(s.startedAt) : null;
+  const dateStr = date ? date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
+  const timeStr = date ? date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "";
+
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1.5px solid " + (live ? "#d32f2f" : "#e6e8ec"),
+        borderRadius: 10,
+        padding: 12,
+        marginBottom: 8
+      }}
+    >
+      <div onClick={onClick} style={{cursor: "pointer"}}>
+        <div style={{display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: 6}}>
+          <div>
+            {live && <span style={{
+              display: "inline-block", background: "#d32f2f", color: "#fff",
+              fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 10,
+              marginRight: 6
+            }}>● LIVE</span>}
+            <span style={{fontWeight: 700, fontSize: 14}}>{s.supplier}</span>
+          </div>
+          <div style={{fontSize: 11, color: "#999"}}>
+            {dateStr} {timeStr}
+          </div>
+        </div>
+
+        <div style={{fontSize: 11, color: "#666", marginBottom: 8}}>
+          Par <b>{s.createdBy || "?"}</b>
+          {s.operators.length > 1 && ` + ${s.operators.filter(o => o !== s.createdBy).join(", ")}`}
+        </div>
+
+        <div style={{display: "flex", gap: 12, fontSize: 12, marginBottom: 6}}>
+          <span>📦 <b>{s.done}/{s.total}</b></span>
+          {s.durationMs > 0 && <span>⏱ {fmtDuration(s.durationMs)}</span>}
+          {s.durationMs > 0 && s.done > 0 && (
+            <span>⚡ {(s.done / (s.durationMs / 60000)).toFixed(1)}/min</span>
+          )}
+        </div>
+
+        <div className="progress-bar">
+          <div className="progress-fill" style={{
+            width: `${progress}%`,
+            background: progress === 100 ? "#4caf50" : (live ? "#ff9800" : "#1a4d2e")
+          }}></div>
+        </div>
+      </div>
+
+      {/* Bouton supprimer rapide */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(s); }}
+        style={{
+          marginTop: 8,
+          width: "100%",
+          padding: 6,
+          fontSize: 12,
+          fontWeight: 600,
+          background: "#ffebee",
+          color: "#c62828",
+          border: "1px solid #ffcdd2",
+          borderRadius: 6,
+          cursor: "pointer"
+        }}
+      >
+        🗑 {live ? "Annuler cette session" : "Supprimer"}
+      </button>
+    </div>
+  );
+}
+
+/* =========================================================================
+   ADMIN SESSION DETAIL (vue détaillée d'une session pour admin)
+   ========================================================================= */
+
+function AdminSessionDetail({ session, onClose }) {
+  const s = session;
+  const date = s.startedAt ? new Date(s.startedAt) : null;
+  const dateStr = date ? date.toLocaleString("fr-FR") : "";
+
+  const products = s.products || [];
+  // storeColumns vient de la session si stockée, sinon fallback ROB/TOL/PDP
+  const storeColumns = useMemo(() => {
+    if (s.meta && Array.isArray(s.meta.storeColumns) && s.meta.storeColumns.length > 0) {
+      return s.meta.storeColumns;
+    }
+    // Fallback : si une session ancienne n'a pas storeColumns mais a des produits avec rob/tol/pdp
+    return [
+      { code: "ROB", label: "ROB", needsNaming: false },
+      { code: "TOL", label: "TOL", needsNaming: false },
+      { code: "PDP", label: "PDP", needsNaming: false }
+    ];
+  }, [s.meta]);
+
+  const productsWithKeys = useMemo(() => {
+    return products.map((p, idx) => ({ ...p, _pkey: productKey(p, idx) }));
+  }, [products]);
+
+  // Helper pour qty effective d'un produit pour un magasin donné
+  const getEffectiveQty = (p, code) => {
+    const st = s.state[p._pkey];
+    if (st && st.qtyStores && st.qtyStores[code] !== undefined) return st.qtyStores[code];
+    // Valeurs prévues (parsées du fichier)
+    if (p.stores && p.stores[code] !== undefined) return p.stores[code];
+    return 0;
+  };
+  const getPlanned = (p, code) => {
+    if (p.stores && p.stores[code] !== undefined) return p.stores[code];
+    return 0;
+  };
+
+  const doneProducts = productsWithKeys.filter(p => s.state[p._pkey]?.done);
+  const notDoneProducts = productsWithKeys.filter(p => !s.state[p._pkey]?.done);
+  const adjusted = doneProducts.filter(p => {
+    for (const sc of storeColumns) {
+      const planned = getPlanned(p, sc.code);
+      const real = getEffectiveQty(p, sc.code);
+      if (planned !== real) return true;
+    }
+    return false;
+  });
+
+  const handleDelete = () => {
+    const msg = s.isLive
+      ? `⚠️ ATTENTION : supprimer cette session EN COURS de "${s.supplier}" ?\n\nLes opérateurs qui sont dessus vont perdre leur travail.\n\nCette action est IRRÉVERSIBLE.`
+      : `Supprimer définitivement la session "${s.supplier}" du ${dateStr} ?\n\nCette action est irréversible.`;
+    if (!confirm(msg)) return;
+    if (!confirm("Es-tu vraiment sûr ? Tape OK pour confirmer.")) return;
+
+    if (firebaseReady) {
+      db.ref(`dispatch/${s.id}`).remove()
+        .then(() => {
+          alert("Session supprimée.");
+          onClose();
+        })
+        .catch(err => alert("Erreur: " + err.message));
+    } else {
+      alert("Firebase non disponible");
+    }
+  };
+
+  return (
+    <div className="app">
+      <div className="header" style={{background: "#0d3d20"}}>
+        <div className="header-row">
+          <div>
+            <h1>{s.supplier}</h1>
+            <div className="sub">{dateStr}</div>
+          </div>
+          <div className="header-actions">
+            <button className="header-btn" onClick={onClose}>← Retour</button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{padding: 12, paddingBottom: 80}}>
+        <div className="recap-card">
+          <h3>Vue d'ensemble</h3>
+          <div className="recap-stat">
+            <span className="label">Créé par</span>
+            <span className="value">{s.createdBy || "?"}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Opérateurs</span>
+            <span className="value">{s.operators.join(", ") || "-"}</span>
+          </div>
+          <div className="recap-stat">
+            <span className="label">Avancement</span>
+            <span className="value">{s.done}/{s.total}</span>
+          </div>
+          {s.durationMs > 0 && (
+            <div className="recap-stat">
+              <span className="label">Durée</span>
+              <span className="value">{fmtDuration(s.durationMs)}</span>
+            </div>
+          )}
+          {s.durationMs > 0 && s.done > 0 && (
+            <div className="recap-stat">
+              <span className="label">Cadence</span>
+              <span className="value">{(s.done / (s.durationMs / 60000)).toFixed(2)} prod/min</span>
+            </div>
+          )}
+        </div>
+
+        {notDoneProducts.length > 0 && (
+          <div className="recap-card">
+            <h3>⏳ Non traités ({notDoneProducts.length})</h3>
+            {notDoneProducts.map(p => (
+              <div className="anomaly-item" key={p._pkey}>
+                <div className="product">{p.designation}</div>
+                <div className="detail">
+                  Reçu: {p.recue} •{" "}
+                  {storeColumns.map((sc, i) => (
+                    <span key={sc.code}>
+                      {i > 0 ? " / " : ""}{sc.label} {getPlanned(p, sc.code)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {adjusted.length > 0 && (
+          <div className="recap-card">
+            <h3>✎ Quantités ajustées ({adjusted.length})</h3>
+            {adjusted.map(p => {
+              const prevu = storeColumns.map(sc => `${sc.label} ${getPlanned(p, sc.code)}`).join(" / ");
+              const reel = storeColumns.map(sc => `${sc.label} ${getEffectiveQty(p, sc.code)}`).join(" / ");
+              return (
+                <div className="anomaly-item" key={p._pkey}>
+                  <div className="product">{p.designation}</div>
+                  <div className="detail">
+                    Prévu: {prevu}<br/>
+                    Réel: {reel}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="recap-card">
+          <h3>📄 Générer les BL PDF</h3>
+          {(() => {
+            const activeStores = storeColumns.filter(sc => {
+              let total = 0;
+              productsWithKeys.forEach(p => { total += getEffectiveQty(p, sc.code); });
+              return total > 0;
+            });
+            return (
+              <>
+                <button
+                  className="btn-primary"
+                  onClick={() => generateAllBLs(s, productsWithKeys, storeColumns)}
+                  style={{marginBottom: 8}}
+                >
+                  📥 Télécharger tous les BL ({activeStores.length})
+                </button>
+                <div style={{display: "grid", gridTemplateColumns: `repeat(${Math.min(activeStores.length, 3)}, 1fr)`, gap: 6}}>
+                  {activeStores.map(sc => (
+                    <button
+                      key={sc.code}
+                      className="btn-secondary"
+                      onClick={() => generateBL(s, productsWithKeys, sc.code, storeColumns)}
+                    >
+                      {sc.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+
+        {/* Zone dangereuse */}
+        <div className="recap-card" style={{border: "1.5px solid #d32f2f"}}>
+          <h3 style={{color: "#d32f2f"}}>⚠️ Zone dangereuse</h3>
+          <p style={{fontSize: 12, color: "#666", margin: "0 0 12px 0"}}>
+            {s.isLive
+              ? "Cette session est en cours. La supprimer arrêtera le travail des opérateurs connectés."
+              : "Supprimer définitivement cette session de l'historique. Action irréversible."
+            }
+          </p>
+          <button
+            className="btn-primary"
+            onClick={handleDelete}
+            style={{background: "#d32f2f"}}
+          >
+            🗑 {s.isLive ? "Annuler ce dispatch en cours" : "Supprimer cette session"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   PDF GENERATION (BL par magasin)
+   ========================================================================= */
+
+function generateBL(session, productsWithKeys, storeCode, storeColumns) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+  // Trouve le label du magasin
+  const storeCol = (storeColumns || []).find(s => s.code === storeCode);
+  const storeName = storeCol ? storeCol.label : storeCode;
+  // Map des noms longs connus
+  const longNames = { ROB: "ROBESPIERRE", TOL: "TOLBIAC", PDP: "PORTE DE PANTIN" };
+  const storeFullName = longNames[storeCode] || storeName;
+
+  const date = session.startedAt ? new Date(session.startedAt) : new Date();
+  const dateStr = date.toLocaleDateString("fr-FR");
+
+  // Header
+  doc.setFillColor(26, 77, 46);
+  doc.rect(0, 0, 210, 25, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont(undefined, "bold");
+  doc.text("KELBONGOO", 14, 12);
+  doc.setFontSize(11);
+  doc.setFont(undefined, "normal");
+  doc.text("Bon de Livraison Magasin", 14, 19);
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.setFont(undefined, "bold");
+  doc.text(storeName, 196, 15, { align: "right" });
+
+  // Info section
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(10);
+  doc.setFont(undefined, "normal");
+
+  let y = 35;
+  doc.text(`Magasin destinataire :`, 14, y);
+  doc.setFont(undefined, "bold");
+  doc.text(storeFullName, 60, y);
+
+  y += 6;
+  doc.setFont(undefined, "normal");
+  doc.text(`Fournisseur :`, 14, y);
+  doc.setFont(undefined, "bold");
+  doc.text(session.supplier || "?", 60, y);
+
+  y += 6;
+  doc.setFont(undefined, "normal");
+  doc.text(`Date dispatch :`, 14, y);
+  doc.setFont(undefined, "bold");
+  doc.text(dateStr, 60, y);
+
+  y += 6;
+  doc.setFont(undefined, "normal");
+  doc.text(`Préparé par :`, 14, y);
+  doc.setFont(undefined, "bold");
+  doc.text((session.operators || []).join(", ") || session.createdBy || "-", 60, y);
+
+  y += 10;
+
+  // Helper pour obtenir la qty effective d'un produit pour ce magasin
+  const getQty = (p) => {
+    const st = session.state[p._pkey] || {};
+    if (st.qtyStores && st.qtyStores[storeCode] !== undefined) return st.qtyStores[storeCode];
+    // Compat ancien format
+    if (storeCode === "ROB" && st.qtyRob !== undefined) return st.qtyRob;
+    if (storeCode === "TOL" && st.qtyTol !== undefined) return st.qtyTol;
+    if (storeCode === "PDP" && st.qtyPdp !== undefined) return st.qtyPdp;
+    return (p.stores && p.stores[storeCode]) || 0;
+  };
+
+  // Filtre les produits avec quantité > 0 pour ce magasin
+  const items = productsWithKeys
+    .map(p => {
+      const st = session.state[p._pkey] || {};
+      return { ...p, _qty: getQty(p), _done: !!st.done };
+    })
+    .filter(p => p._qty > 0)
+    .sort((a, b) => a.designation.localeCompare(b.designation, "fr"));
+
+  // Tableau
+  doc.autoTable({
+    startY: y,
+    head: [["Code article", "Désignation", "Quantité", "✓"]],
+    body: items.map(p => [
+      p.article || "-",
+      p.designation,
+      String(p._qty),
+      p._done ? "✓" : ""
+    ]),
+    theme: "striped",
+    headStyles: {
+      fillColor: [26, 77, 46],
+      textColor: 255,
+      fontStyle: "bold",
+      fontSize: 9
+    },
+    styles: { fontSize: 9, cellPadding: 2 },
+    columnStyles: {
+      0: { cellWidth: 32, fontStyle: "bold" },
+      1: { cellWidth: 110 },
+      2: { cellWidth: 20, halign: "center", fontStyle: "bold" },
+      3: { cellWidth: 12, halign: "center" }
+    },
+    margin: { left: 14, right: 14 }
+  });
+
+  const totalQty = items.reduce((sum, p) => sum + p._qty, 0);
+  const finalY = doc.lastAutoTable.finalY + 5;
+
+  doc.setFillColor(240, 240, 240);
+  doc.rect(14, finalY, 182, 10, "F");
+  doc.setFontSize(11);
+  doc.setFont(undefined, "bold");
+  doc.text(`TOTAL : ${items.length} référence(s) — ${totalQty} unité(s)`, 18, finalY + 7);
+
+  const sigY = finalY + 20;
+  doc.setFontSize(9);
+  doc.setFont(undefined, "normal");
+  doc.text("Signature préparateur :", 14, sigY);
+  doc.text("Signature réception magasin :", 110, sigY);
+  doc.rect(14, sigY + 3, 80, 25);
+  doc.rect(110, sigY + 3, 80, 25);
+
+  doc.setFontSize(8);
+  doc.setTextColor(150, 150, 150);
+  doc.text(
+    `Généré le ${new Date().toLocaleString("fr-FR")} • Session: ${session.id}`,
+    14, 287
+  );
+
+  const safeName = (session.supplier || "").replace(/[^a-zA-Z0-9]/g, "");
+  const safeStore = storeCode.replace(/[^a-zA-Z0-9]/g, "");
+  const filename = `BL_${safeStore}_${safeName}_${dateStr.replace(/\//g, "-")}.pdf`;
+  doc.save(filename);
+}
+
+function generateAllBLs(session, productsWithKeys, storeColumns) {
+  // Détermine les magasins qui ont au moins 1 unité à dispatcher
+  const activeStores = (storeColumns || []).filter(sc => {
+    let total = 0;
+    productsWithKeys.forEach(p => {
+      const st = session.state[p._pkey] || {};
+      const q = (st.qtyStores && st.qtyStores[sc.code] !== undefined)
+        ? st.qtyStores[sc.code]
+        : (p.stores && p.stores[sc.code]) || 0;
+      total += q;
+    });
+    return total > 0;
+  });
+  if (activeStores.length === 0) {
+    alert("Aucun magasin avec des produits à dispatcher.");
+    return;
+  }
+  activeStores.forEach((sc, i) => {
+    setTimeout(() => generateBL(session, productsWithKeys, sc.code, storeColumns), i * 300);
+  });
+}
+
+/* =========================================================================
+   NAMING SCREEN — Pour nommer les magasins/sites inconnus
+   ========================================================================= */
+
+function NamingScreen({ supplier, products, storeColumns, onConfirm, onCancel }) {
+  // Chaque magasin needsNaming a un input pour son nom final
+  const [names, setNames] = useState(() => {
+    const init = {};
+    storeColumns.forEach(s => {
+      if (s.needsNaming) {
+        init[s.code] = s.label; // valeur initiale = label original
+      }
+    });
+    return init;
+  });
+  const [error, setError] = useState("");
+
+  const unknown = storeColumns.filter(s => s.needsNaming);
+  const known = storeColumns.filter(s => !s.needsNaming);
+
+  // Stats par colonne pour aider l'utilisateur à identifier
+  const statsPerColumn = useMemo(() => {
+    const stats = {};
+    storeColumns.forEach(s => {
+      let total = 0, nbProducts = 0;
+      products.forEach(p => {
+        const q = p.stores[s.code] || 0;
+        if (q > 0) {
+          total += q;
+          nbProducts++;
+        }
+      });
+      stats[s.code] = { total, nbProducts };
+    });
+    return stats;
+  }, [products, storeColumns]);
+
+  const handleConfirm = () => {
+    // Vérifier que tous les inconnus ont un nom non vide
+    for (const s of unknown) {
+      const name = (names[s.code] || "").trim();
+      if (!name) {
+        setError(`Donne un nom à la colonne "${s.label}"`);
+        return;
+      }
+    }
+    // Construit la liste finale de storeColumns
+    const finalCols = storeColumns.map(s => {
+      if (s.needsNaming) {
+        const label = names[s.code].trim();
+        // Génère un code propre depuis le label saisi
+        const code = stripAccents(label).toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 20);
+        return { code, label, needsNaming: false };
+      }
+      return s;
+    });
+    // Renomme aussi les codes dans les produits
+    const codeMap = {};
+    storeColumns.forEach((old, i) => {
+      codeMap[old.code] = finalCols[i].code;
+    });
+    const finalProducts = products.map(p => {
+      const newStores = {};
+      for (const oldCode in p.stores) {
+        const newCode = codeMap[oldCode] || oldCode;
+        newStores[newCode] = p.stores[oldCode];
+      }
+      return { ...p, stores: newStores };
+    });
+    onConfirm(finalProducts, finalCols);
+  };
+
+  return (
+    <div className="screen-center" style={{padding: 16}}>
+      <div className="card" style={{maxWidth: 500}}>
+        <h3 style={{margin: "0 0 8px 0"}}>📋 Identifier les magasins</h3>
+        <p style={{fontSize: 13, color: "#666", margin: "0 0 16px 0"}}>
+          Fournisseur : <b>{supplier}</b><br/>
+          {unknown.length} colonne(s) inconnue(s) trouvée(s). Indique à quel site/magasin elles correspondent.
+        </p>
+
+        {known.length > 0 && (
+          <div style={{marginBottom: 16, padding: 10, background: "#e8f5e9", borderRadius: 6}}>
+            <div style={{fontSize: 11, fontWeight: 700, color: "#1a4d2e", marginBottom: 4}}>
+              ✓ MAGASINS RECONNUS AUTOMATIQUEMENT
+            </div>
+            {known.map(s => (
+              <div key={s.code} style={{fontSize: 12, color: "#333"}}>
+                • {s.label} ({statsPerColumn[s.code].total} unités sur {statsPerColumn[s.code].nbProducts} produits)
+              </div>
+            ))}
+          </div>
+        )}
+
+        {unknown.map(s => (
+          <div key={s.code} style={{marginBottom: 16, padding: 12, background: "#fff3e0", borderRadius: 8, border: "1px solid #ffcc80"}}>
+            <div style={{fontSize: 11, fontWeight: 700, color: "#e65100", marginBottom: 4}}>
+              ⚠️ COLONNE INCONNUE
+            </div>
+            <div style={{fontSize: 13, marginBottom: 8}}>
+              Nom dans le fichier : <b>{s.label}</b><br/>
+              <span style={{color: "#666"}}>
+                {statsPerColumn[s.code].total} unités sur {statsPerColumn[s.code].nbProducts} produits
+              </span>
+            </div>
+            <label style={{fontSize: 12, fontWeight: 600, color: "#555"}}>
+              Sigle ou nom du site/magasin
+            </label>
+            <input
+              type="text"
+              value={names[s.code] || ""}
+              onChange={(e) => { setNames(prev => ({...prev, [s.code]: e.target.value})); setError(""); }}
+              placeholder="Ex: BIC, FOR, PDP, Client X..."
+              style={{
+                width: "100%", padding: 10, fontSize: 15, marginTop: 4,
+                border: "1.5px solid #ddd", borderRadius: 6,
+                textTransform: "uppercase"
+              }}
+            />
+          </div>
+        ))}
+
+        {error && (
+          <div style={{color: "#c62828", background: "#ffebee", padding: 10, borderRadius: 6, fontSize: 13, marginBottom: 12}}>
+            {error}
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button className="btn-cancel" onClick={onCancel}>Annuler</button>
+          <button className="btn-confirm" onClick={handleConfirm}>
+            ✓ Démarrer le dispatch
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   CHOIX DU MODE (Palette / MU)
+   ========================================================================= */
+
+function ModeChoiceScreen({ operator, onChoose, onOpenAdmin, onLogout }) {
+  return (
+    <div className="screen-center">
+      <div className="logo">Kelbongoo <span style={{fontSize:11,opacity:0.5,fontWeight:400}}>{APP_VERSION}</span></div>
+      <div className="tag">Bonjour {operator} 👋 — que fais-tu ?</div>
+
+      <div className="mode-grid">
+        <button className="mode-btn" onClick={() => onChoose("palette")}>
+          <div className="ico">🪵</div>
+          <div className="ttl">Dispatch palette</div>
+          <div className="desc">Répartition des colis sur les palettes de livraison par site.</div>
+        </button>
+
+        <button className="mode-btn mu" onClick={() => onChoose("mu")}>
+          <div className="ico">🥕</div>
+          <div className="ttl">Mise en unité (MU)</div>
+          <div className="desc">Mettre les fruits & légumes en sachets selon les quantités du site.</div>
+        </button>
+      </div>
+
+      {isAdmin(operator) && (
+        <div style={{marginTop: 18, width: "100%", maxWidth: 360}}>
+          <button
+            className="btn-secondary"
+            onClick={onOpenAdmin}
+            style={{background: "#1a4d2e", color: "#fff", fontWeight: 700, padding: 14}}
+          >
+            🔐 Mode Admin
+          </button>
+        </div>
+      )}
+
+      <div style={{marginTop: 12, width: "100%", maxWidth: 360}}>
+        <button className="btn-secondary" onClick={onLogout} style={{fontSize: 13, color: "#666"}}>
+          ↪ Se déconnecter ({operator})
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   MODE MU (mise en unité) — côté préparateur
+   ========================================================================= */
+
+// Une carte produit MU
+function MuCard({ item, operator, dateKey, myActive, doneCount, busyBy }) {
+  const [phase, setPhase]        = useState(myActive ? (myActive.status === "paused" ? "paused" : "running") : "idle");
+  const [inProgress, setInProgress] = useState("");
+  const [finalQty,   setFinalQty]   = useState("");
+
+  useEffect(() => {
+    if (!myActive) { setPhase("idle"); setInProgress(""); return; }
+    const p = myActive.status === "paused" ? "paused" : "running";
+    setPhase(p);
+    // Toujours resynchroniser inProgress depuis Firebase (survit au reload/resume)
+    if (myActive.inProgress != null && myActive.inProgress !== 0)
+      setInProgress(String(myActive.inProgress));
+  }, [myActive && myActive.id, myActive && myActive.status, myActive && myActive.inProgress]);
+
+  const entRef = () => db.ref(`mu/${dateKey}/entries`);
+
+  const handleStart = () => {
+    if (!firebaseReady) { alert("Connexion impossible."); return; }
+    entRef().push().set({
+      product: item.produit || item.product,
+      target:  item.estimation || item.target || 0,
+      operator, startedAt: Date.now(), elapsedMs: 0, inProgress: 0, status: "active"
+    });
+  };
+
+  const handlePause = () => {
+    if (!myActive) return;
+    const elapsed = (myActive.elapsedMs || 0) + (Date.now() - (myActive.startedAt || Date.now()));
+    const ip = parseInt(inProgress, 10) || myActive.inProgress || 0;
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ status: "paused", elapsedMs: elapsed, pausedAt: Date.now(), inProgress: ip });
+    setPhase("paused");
+  };
+
+  const handleResume = () => {
+    if (!myActive) return;
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ status: "active", startedAt: Date.now() });
+    setPhase("running");
+    // Restaure la quantité en cours depuis Firebase
+    if (myActive.inProgress != null) setInProgress(String(myActive.inProgress));
+  };
+
+  const handleCancel = () => {
+    if (!myActive) return;
+    if (!confirm("Annuler cette mise en unité ?")) return;
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).remove();
+    setPhase("idle"); setInProgress(""); setFinalQty("");
+  };
+
+  const saveInProgress = () => {
+    if (!myActive) return;
+    const v = parseInt(inProgress, 10);
+    if (!isNaN(v) && v >= 0) db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ inProgress: v });
+  };
+
+  const openFinish = () => {
+    const ip = parseInt(inProgress, 10) || myActive?.inProgress || 0;
+    setFinalQty(String(Math.max(ip, item.estimation || item.target || 0)));
+    setPhase("finishing");
+  };
+
+  const handleValidate = () => {
+    if (!myActive) return;
+    const done = Math.max(0, parseInt(finalQty, 10) || 0);
+    const finishedAt = Date.now();
+    const elapsed = (myActive.elapsedMs || 0) + (phase !== "paused" ? finishedAt - (myActive.startedAt || finishedAt) : 0);
+    db.ref(`mu/${dateKey}/entries/${myActive.id}`).update({ status: "done", done, finishedAt, durationMs: elapsed, inProgress: done });
+    setPhase("idle"); setInProgress(""); setFinalQty("");
+  };
+
+  const estimation = item.estimation || item.target || "—";
+  const ip = myActive?.inProgress || 0;
+  // progression % pour barre
+  const pct = estimation !== "—" && estimation > 0 ? Math.min(100, Math.round(((doneCount + ip) / estimation) * 100)) : 0;
+
+  return (
+    <div className={`mu-card ${phase !== "idle" ? "active" : ""} ${phase === "paused" ? "paused" : ""}`}>
+      <div className="mu-name">{item.produit || item.product}</div>
+      {item.uv && <div style={{fontSize:11,color:"#888",marginBottom:6}}>📏 {item.uv}</div>}
+
+      {/* Barre de progression motivante */}
+      <div style={{background:"#e8f5e9",borderRadius:99,height:10,margin:"6px 0 10px",overflow:"hidden"}}>
+        <div style={{height:"100%",borderRadius:99,background: pct >= 100 ? "#2e7d32" : "#ef6c00",width: pct + "%",transition:"width 0.4s"}} />
+      </div>
+
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#666",marginBottom:8}}>
+        <span>🎯 à faire : <b>{estimation}</b></span>
+        {doneCount > 0 && <span style={{color:"#2e7d32"}}>✅ {doneCount} fait{doneCount>1?"s":""}</span>}
+      </div>
+
+      {!myActive && busyBy.length > 0 && (
+        <div style={{fontSize:12,color:"#888",marginBottom:6}}>🧑 {busyBy.join(", ")} est en train de préparer…</div>
+      )}
+
+      {/* IDLE */}
+      {phase === "idle" && (
+        <button className="mu-start" onClick={handleStart}>▶ Je commence !</button>
+      )}
+
+      {/* RUNNING */}
+      {phase === "running" && (
+        <div className="mu-running">
+          <div style={{fontSize:13,color:"#ef6c00",fontWeight:700,marginBottom:8}}>🏃 En cours…</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"center",marginBottom:10}}>
+            <span style={{fontSize:13,color:"#555"}}>Sachets prêts :</span>
+            <input type="number" inputMode="numeric" value={inProgress}
+              onChange={e => setInProgress(e.target.value)} onBlur={saveInProgress}
+              placeholder="0"
+              style={{width:64,textAlign:"center",fontSize:18,fontWeight:700,padding:"5px",borderRadius:8,border:"2px solid #ef6c00"}} />
+          </div>
+          <div className="btns" style={{gap:8}}>
+            <button className="mu-cancel-btn" onClick={handleCancel} title="Annuler">✕</button>
+            <button className="mu-pause-btn" onClick={handlePause}>⏸ Pause</button>
+            <button className="mu-done-btn" onClick={openFinish}>✓ Terminé !</button>
+          </div>
+        </div>
+      )}
+
+      {/* PAUSED */}
+      {phase === "paused" && (
+        <div className="mu-running" style={{background:"#fff8e1",borderRadius:8,padding:"10px 0 4px"}}>
+          <div style={{fontSize:13,color:"#b45309",fontWeight:700,marginBottom:6}}>⏸ En pause — {ip} sachet{ip>1?"s":""} prêts</div>
+          <div className="btns" style={{gap:8}}>
+            <button className="mu-cancel-btn" onClick={handleCancel}>✕</button>
+            <button className="mu-start" style={{flex:1}} onClick={handleResume}>▶ Je reprends !</button>
+            <button className="mu-done-btn" onClick={openFinish}>✓ Terminé !</button>
+          </div>
+        </div>
+      )}
+
+      {/* FINISHING */}
+      {phase === "finishing" && (
+        <div className="mu-stepper">
+          <div className="q" style={{marginBottom:4}}>🎉 Combien de sachets au total ?</div>
+          <div style={{fontSize:12,color:"#888",marginBottom:8}}>Estimation : {estimation} · en cours : {ip}</div>
+          <div className="row">
+            <button className="mu-step-pm" onClick={() => setFinalQty(s => String(Math.max(0,(parseInt(s,10)||0)-1)))}>−</button>
+            <input className="mu-step-val" type="number" inputMode="numeric"
+              value={finalQty} onChange={e => setFinalQty(e.target.value)} onFocus={e => e.target.select()} />
+            <button className="mu-step-pm" onClick={() => setFinalQty(s => String((parseInt(s,10)||0)+1))}>+</button>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <button className="mu-cancel-btn" style={{flex:"0 0 auto"}} onClick={() => setPhase(myActive?.status==="paused"?"paused":"running")}>← Retour</button>
+            <button className="mu-validate" style={{flex:1}} onClick={handleValidate}>✅ Valider</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function MUScreen({ operator, onBack, onOpenAdmin, onLogout }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [entries, setEntries] = useState({}); // { id: entry } pour le jour courant
+  const dateKey = todayKey();
+
+  // Charge la liste des FL à mettre en unité depuis le proxy Apps Script
+  const loadList = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const url = `${FL_PROXY_URL}?action=get-mu-list&sheetId=${MU_SHEET_ID}&tab=${encodeURIComponent("UNIQUEMENT STOCK A REMPLIR PAR PDP ")}&typeCol=TYPE&activeCol=ACTIF+%3F&typeVal=MU`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error || "Erreur de lecture de la feuille");
+      const list = data.items || [];
+      if (list.length === 0) {
+        setError("Aucun FL actif de type MU (« m ») trouvé dans la feuille. Vérifie la colonne TYPE et les colonnes détectées : " + (data.headers ? data.headers.join(" | ") : "?"));
+      }
+      setItems(list);
+    } catch (e) {
+      setError("Impossible de charger la liste : " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadList(); }, [loadList]);
+
+  // Abonnement temps réel aux entrées MU du jour
+  const mailSentRef = React.useRef(false); // évite double envoi dans la journée
+  useEffect(() => { mailSentRef.current = false; }, [dateKey]); // reset chaque jour
+
+  useEffect(() => {
+    if (!firebaseReady) return;
+    const ref = db.ref(`mu/${dateKey}/entries`);
+    const handler = (snap) => {
+      const all = snap.val() || {};
+      const map = {};
+      Object.entries(all).forEach(([id, e]) => { if (e) map[id] = { id, ...e }; });
+      setEntries(map);
+    };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, [dateKey]);
+
+  // Envoi automatique du récap quand TOUS les produits MU sont terminés
+  useEffect(() => {
+    if (mailSentRef.current) return;
+    if (!items.length) return;
+    const vals = Object.values(entries);
+    // Un produit est "terminé" si au moins une entrée done existe pour lui
+    const doneProducts = new Set(vals.filter(e => e.status === "done").map(e => e.product));
+    const planned = items.filter(it => it.estimation != null && it.estimation > 0);
+    const allDone = planned.length > 0 && planned.every(it => doneProducts.has(it.produit || it.product));
+    if (!allDone) return;
+    mailSentRef.current = true;
+    // Calcule le récap
+    const doneEntries = vals.filter(e => e.status === "done");
+    const byOp = {}, byProd = {};
+    doneEntries.forEach(e => {
+      if (!byOp[e.operator]) byOp[e.operator] = { sachets:0, durationMs:0, produits:[] };
+      byOp[e.operator].sachets    += e.done || 0;
+      byOp[e.operator].durationMs += e.durationMs || 0;
+      byOp[e.operator].produits.push(e.product);
+      if (!byProd[e.product]) byProd[e.product] = { target: e.target||0, done:0, operators:[] };
+      byProd[e.product].done += e.done || 0;
+      if (!byProd[e.product].operators.includes(e.operator)) byProd[e.product].operators.push(e.operator);
+    });
+    const byOperator = Object.entries(byOp).map(([name,v]) => ({
+      name, ...v, cadence: v.durationMs > 0 ? (v.sachets/(v.durationMs/3600000)).toFixed(0) : "-"
+    }));
+    const byProduct  = Object.entries(byProd).map(([product,v]) => ({ product, ...v }));
+    const total      = doneEntries.reduce((s,e) => s + (e.done||0), 0);
+    const durationMs = doneEntries.reduce((s,e) => s + (e.durationMs||0), 0);
+    fetch(FL_PROXY_URL, { method:"POST", body: JSON.stringify({
+      secret: FRESHDESK_SECRET, action: "mail_mu_recap",
+      day: dateKey, total, durationMs, byOperator, byProduct, entries: doneEntries
+    }) }).catch(() => {}); // silencieux — on ne bloque pas l'UI
+  }, [entries, items]);
+
+  // Index par produit : compteurs faits + qui est en cours + ma session active
+  const byProduct = useMemo(() => {
+    const idx = {};
+    // Passe 1 : pour chaque produit, garder la dernière entrée done (finishedAt le plus grand)
+    // et l'entrée active/paused en cours pour l'opérateur courant.
+    Object.values(entries).forEach(e => {
+      const p = e.product;
+      if (!p) return;
+      if (!idx[p]) idx[p] = { lastDone: null, doneCount: 0, busy: [], mine: null };
+      if (e.status === "done") {
+        // Ne garder que la plus récente (évite les cumuls sur doublons Firebase)
+        if (!idx[p].lastDone || (e.finishedAt || 0) > (idx[p].lastDone.finishedAt || 0))
+          idx[p].lastDone = e;
+      } else if (e.status === "active" || e.status === "paused") {
+        if (e.operator === operator) {
+          if (!idx[p].mine || (e.startedAt || 0) > (idx[p].mine.startedAt || 0)) idx[p].mine = e;
+        } else if (!idx[p].busy.includes(e.operator)) {
+          idx[p].busy.push(e.operator);
+        }
+      }
+    });
+    // Passe 2 : extraire doneCount depuis lastDone uniquement
+    Object.values(idx).forEach(v => {
+      v.doneCount = v.lastDone ? (v.lastDone.done || 0) : 0;
+    });
+    return idx;
+  }, [entries, operator]);
+
+  // Totaux du jour
+  const totals = useMemo(() => {
+    let all = 0, mine = 0;
+    Object.values(entries).forEach(e => {
+      if (e.status === "done") {
+        all += (e.done || 0);
+        if (e.operator === operator) mine += (e.done || 0);
+      }
+    });
+    return { all, mine };
+  }, [entries, operator]);
+
+  // Produits avec estimation = planifies ; sans estimation = dispo pour MU suppl
+  const plannedItems = useMemo(() => items.filter(it => it.estimation != null && it.estimation > 0), [items]);
+  const extraPool    = useMemo(() => items.filter(it => !it.estimation || it.estimation <= 0), [items]);
+
+  // allFlItems = tous les produits FL actifs (planifies + extra pool) pour MU non prevues
+  // + produits FL inactifs non presentes dans items (pas de type MU) — on les charge separement
+  const [showExtra, setShowExtra] = useState(false);
+  const [extraAdded, setExtraAdded] = useState({}); // key -> item
+
+  const addExtra = (it) => setExtraAdded(prev => ({ ...prev, [it.produit||it.product]: it }));
+
+  const filtered = useMemo(() => {
+    const base = plannedItems.filter(it => {
+      const key = it.produit || it.product;
+      const info = byProduct[key] || {};
+      // Dès qu'un produit est VALIDÉ (au moins une entrée « done »), il disparaît de la page
+      // et ne revient plus — même si la quantité faite est sous l'estimation.
+      // L'historique reste consultable dans le récap (onglet MU master + mail récap).
+      if (info.lastDone) return false;
+      return true;
+    });
+    const q = search.trim() ? stripAccents(search.toLowerCase()) : null;
+    return q ? base.filter(it => stripAccents((it.produit||it.product||"").toLowerCase()).includes(q)) : base;
+  }, [plannedItems, byProduct, search]);
+
+  const filteredExtra = useMemo(() => {
+    const pool = extraPool.filter(it => !(it.produit||it.product in extraAdded));
+    const q = search.trim() ? stripAccents(search.toLowerCase()) : null;
+    return q ? pool.filter(it => stripAccents((it.produit||it.product||"").toLowerCase()).includes(q)) : pool;
+  }, [extraPool, extraAdded, search]);
+
+  const renderCard = (it, idx) => {
+    const key = it.produit || it.product;
+    const info = byProduct[key] || byProduct[it.product] || { doneCount: 0, busy: [], mine: null };
+    return (
+      <MuCard
+        key={`${key}_${idx}`}
+        item={it}
+        operator={operator}
+        dateKey={dateKey}
+        myActive={info.mine}
+        doneCount={info.doneCount}
+        busyBy={info.busy}
+      />
+    );
+  };
+
+  return (
+    <div className="app">
+      <div className="header" style={{background: "#ef6c00"}}>
+        <div className="header-row">
+          <div>
+            <h1>🥕 Mise en unité</h1>
+            <div className="sub">{fmtDateKey(dateKey)}</div>
+          </div>
+          <div className="header-actions">
+            {isAdmin(operator) && (
+              <button className="header-btn" onClick={onOpenAdmin}>🔐</button>
+            )}
+            <button className="header-btn" onClick={onBack}>← Mode</button>
+          </div>
+        </div>
+      </div>
+      {/* Bandeau nom en gros */}
+      <div style={{background:"#fff8f0",borderBottom:"2px solid #ef6c00",padding:"10px 14px",
+        display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+        <div>
+          <div style={{fontSize:11,color:"#aaa",marginBottom:1}}>Préparateur actif</div>
+          <div style={{fontSize:22,fontWeight:900,color:"#ef6c00",letterSpacing:"-0.5px"}}>{operator}</div>
+        </div>
+        <button onClick={onBack} style={{padding:"8px 14px",borderRadius:10,border:"2px solid #ef6c00",
+          background:"#fff",color:"#ef6c00",fontWeight:700,fontSize:12,cursor:"pointer",flexShrink:0}}>
+          👤 Ce n'est pas moi
+        </button>
+      </div>
+
+      <div className="mu-topbar">
+        <input
+          type="text"
+          placeholder="🔍 Chercher un fruit / légume…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <button className="mu-refresh" onClick={loadList}>↻</button>
+      </div>
+
+      {/* ── Barre de progression globale ── */}
+      {!loading && !error && (() => {
+        const totalEst  = plannedItems.reduce((s, it) => s + (it.estimation || 0), 0);
+        const totalDone = Object.values(entries)
+          .filter(e => e.status === "done")
+          .reduce((s, e) => s + (e.done || 0), 0);
+        const totalIP   = Object.values(entries)
+          .filter(e => e.status === "active" || e.status === "paused")
+          .reduce((s, e) => s + (e.inProgress || 0), 0);
+        const nbDone    = plannedItems.filter(it => {
+          const key = it.produit || it.product;
+          return Object.values(entries).some(e => e.status === "done" && (e.product === key));
+        }).length;
+        const pctDone   = totalEst > 0 ? Math.min(100, Math.round((totalDone / totalEst) * 100)) : 0;
+        const pctIP     = totalEst > 0 ? Math.min(100 - pctDone, Math.round((totalIP  / totalEst) * 100)) : 0;
+        const allFinished = nbDone === plannedItems.length && plannedItems.length > 0;
+        return (
+          <div style={{margin: "0 14px 4px", background:"#fff", borderRadius:14, padding:"12px 14px",
+            boxShadow:"0 1px 6px rgba(0,0,0,0.07)"}}>
+            {/* Barre combinée : fait (vert) + en cours (orange) */}
+            <div style={{background:"#eee", borderRadius:99, height:14, overflow:"hidden", marginBottom:8, position:"relative"}}>
+              <div style={{position:"absolute", left:0, top:0, height:"100%", borderRadius:99,
+                background:"#2e7d32", width:pctDone+"%", transition:"width 0.5s"}} />
+              <div style={{position:"absolute", left:pctDone+"%", top:0, height:"100%",
+                background:"#ef6c00", width:pctIP+"%", transition:"width 0.5s", opacity:0.7}} />
+            </div>
+            <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:6}}>
+              <div style={{display:"flex", gap:12, fontSize:13}}>
+                <span>🎯 <b>{totalEst}</b> <span style={{color:"#aaa"}}>à faire</span></span>
+                <span style={{color:"#2e7d32"}}>✅ <b>{totalDone}</b> faits</span>
+                {totalIP > 0 && <span style={{color:"#ef6c00"}}>🏃 <b>{totalIP}</b> en cours</span>}
+              </div>
+              <div style={{fontSize:12, color: allFinished ? "#2e7d32":"#888", fontWeight: allFinished?700:400}}>
+                {allFinished ? "🎉 Tout est fait !" : `${nbDone}/${plannedItems.length} produits terminés`}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {loading && <div style={{textAlign: "center", padding: 40, color: "#999"}}>Chargement de la liste…</div>}
+
+      {!loading && error && (
+        <div style={{margin: 14, padding: 14, background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: 10, fontSize: 13, color: "#bf6000"}}>
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && plannedItems.length === 0 && (
+        <div style={{textAlign: "center", padding: 40, color: "#999"}}>Aucun produit planifié pour aujourd'hui.</div>
+      )}
+
+      {/* Liste principale : produits AVEC estimation */}
+      {!loading && filtered.length > 0 && (
+        <div className="mu-grid">
+          {filtered.map(renderCard)}
+        </div>
+      )}
+
+      {/* MU non prévues : produits sans estimation + extra ajoutés */}
+      {!loading && (
+        <div style={{margin: "12px 14px 0"}}>
+          <button
+            onClick={() => setShowExtra(s => !s)}
+            style={{width:"100%", padding:"12px 16px", borderRadius:10, border:"2px dashed #ef6c00",
+              background: showExtra ? "#fff8f0":"#fff", color:"#ef6c00", fontWeight:700, fontSize:14, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"space-between"}}
+          >
+            <span>➕ MU non prévues {extraPool.length > 0 ? `(${extraPool.length} produits dispo)` : ""}</span>
+            <span>{showExtra ? "▲" : "▼"}</span>
+          </button>
+
+          {showExtra && (
+            <div style={{marginTop:10}}>
+              <p style={{fontSize:12, color:"#888", margin:"0 0 8px"}}>
+                Ces produits n'ont pas d'estimation aujourd'hui. Ajoute-les si tu dois faire de la MU supplémentaire.
+              </p>
+
+              {/* Produits extra déjà ajoutés (masqués une fois validés) */}
+              {Object.keys(extraAdded).length > 0 && (
+                <div className="mu-grid" style={{marginBottom:12}}>
+                  {Object.values(extraAdded)
+                    .filter(it => !(byProduct[it.produit || it.product] || {}).lastDone)
+                    .map((it, idx) => renderCard(it, 1000+idx))}
+                </div>
+              )}
+
+              {/* Pool de produits disponibles à ajouter */}
+              {filteredExtra.map(it => {
+                const key = it.produit || it.product;
+                return (
+                  <div key={key} style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+                    padding:"8px 12px", marginBottom:6, borderRadius:8, border:"1px solid #eee", background:"#fafafa"}}>
+                    <div>
+                      <div style={{fontWeight:600, fontSize:13}}>{key}</div>
+                      {it.uv && <div style={{fontSize:11, color:"#999"}}>{it.uv}</div>}
+                    </div>
+                    <button onClick={() => addExtra(it)}
+                      style={{padding:"6px 14px", borderRadius:8, border:"none", background:"#ef6c00",
+                        color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer"}}>
+                      + Ajouter
+                    </button>
+                  </div>
+                );
+              })}
+              {filteredExtra.length === 0 && Object.keys(extraAdded).length === extraPool.length && (
+                <div style={{fontSize:12, color:"#bbb", textAlign:"center", padding:8}}>Tous les produits disponibles ont été ajoutés.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mu-bottom">
+        <div>
+          <div className="b-num">{totals.mine}</div>
+          <div className="b-lbl">tes sachets</div>
+        </div>
+        <div>
+          <div className="b-num">{totals.all}</div>
+          <div className="b-lbl">total aujourd'hui</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================
+   ONGLET MU DANS LE MASTER (admin) — historique & recap par nom
+   ========================================================================= */
+
+function MuAdminTab() {
+  const [allDays, setAllDays]   = useState({});
+  const [loading, setLoading]   = useState(true);
+  const [selectedDay, setSelectedDay] = useState("");
+  const [sending, setSending]   = useState(false);
+  const [mailSent, setMailSent] = useState({});
+
+  useEffect(() => {
+    if (!firebaseReady) { setLoading(false); return; }
+    const ref = db.ref("mu");
+    const handler = (snap) => { setAllDays(snap.val() || {}); setLoading(false); };
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, []);
+
+  const dayKeys = useMemo(() => Object.keys(allDays).sort((a,b) => a<b?1:-1), [allDays]);
+  useEffect(() => { if (!selectedDay && dayKeys.length > 0) setSelectedDay(dayKeys[0]); }, [dayKeys, selectedDay]);
+
+  const allEntries = useMemo(() => {
+    const d = allDays[selectedDay];
+    if (!d || !d.entries) return [];
+    return Object.entries(d.entries)
+      .filter(([,e]) => e)
+      .map(([id, e]) => ({ id, ...e }))
+      .sort((a,b) => (a.startedAt||0) - (b.startedAt||0));
+  }, [allDays, selectedDay]);
+
+  const doneEntries = useMemo(() => allEntries.filter(e => e.status === "done"), [allEntries]);
+
+  const byOperator = useMemo(() => {
+    const m = {};
+    doneEntries.forEach(e => {
+      if (!m[e.operator]) m[e.operator] = { sachets:0, durationMs:0, produits:[] };
+      m[e.operator].sachets    += e.done || 0;
+      m[e.operator].durationMs += e.durationMs || 0;
+      m[e.operator].produits.push(e.product);
+    });
+    return Object.entries(m).map(([name,v]) => ({
+      name, ...v,
+      cadence: v.durationMs > 0 ? (v.sachets / (v.durationMs / 3600000)).toFixed(0) : "—",
+    })).sort((a,b) => b.sachets - a.sachets);
+  }, [doneEntries]);
+
+  const byProduct = useMemo(() => {
+    const m = {};
+    doneEntries.forEach(e => {
+      if (!m[e.product]) m[e.product] = { target: e.target||0, done:0, operators:[] };
+      m[e.product].done += e.done || 0;
+      if (!m[e.product].operators.includes(e.operator)) m[e.product].operators.push(e.operator);
+      if ((e.target||0) > m[e.product].target) m[e.product].target = e.target||0;
+    });
+    return Object.entries(m).map(([product,v]) => ({ product, ...v })).sort((a,b) => b.done - a.done);
+  }, [doneEntries]);
+
+  const dayTotal = useMemo(() => doneEntries.reduce((s,e) => s + (e.done||0), 0), [doneEntries]);
+  const dayDurationMs = useMemo(() => doneEntries.reduce((s,e) => s + (e.durationMs||0), 0), [doneEntries]);
+
+  const sendMailRecap = async () => {
+    if (!selectedDay) return;
+    setSending(true);
+    try {
+      const payload = {
+        secret: typeof FRESHDESK_SECRET !== "undefined" ? FRESHDESK_SECRET : "Lesmailspartent!",
+        action: "mail_mu_recap",
+        day: selectedDay,
+        total: dayTotal,
+        durationMs: dayDurationMs,
+        byOperator,
+        byProduct,
+        entries: doneEntries,
+      };
+      const res = await fetch(FL_PROXY_URL, { method:"POST", body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "erreur proxy");
+      setMailSent(prev => ({ ...prev, [selectedDay]: true }));
+      alert("✉️ Récap envoyé à hg@probon.fr");
+    } catch(e) {
+      alert("Erreur envoi mail : " + e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (loading) return <div style={{textAlign:"center",padding:40,color:"#999"}}>Chargement…</div>;
+  if (dayKeys.length === 0) return <div style={{textAlign:"center",padding:40,color:"#999"}}>Aucune mise en unité enregistrée.</div>;
+
+  return (
+    <div>
+      {/* Sélecteur jour */}
+      <div style={{marginBottom:12,overflowX:"auto",display:"flex",gap:6,paddingBottom:4}}>
+        {dayKeys.map(k => (
+          <button key={k} onClick={() => setSelectedDay(k)} style={{
+            flex:"0 0 auto",padding:"8px 12px",borderRadius:8,fontSize:13,fontWeight:700,
+            background: selectedDay===k ? "#ef6c00":"#f0f0f0", color: selectedDay===k?"#fff":"#555",border:"none",cursor:"pointer"
+          }}>{fmtDateKey(k)}</button>
+        ))}
+      </div>
+
+      {/* KPIs */}
+      <div className="recap-card">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <h3 style={{margin:0}}>🥕 {fmtDateKey(selectedDay)}</h3>
+          <button onClick={sendMailRecap} disabled={sending} style={{
+            padding:"7px 14px",borderRadius:8,border:"none",background: mailSent[selectedDay]?"#2e7d32":"#ef6c00",
+            color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"
+          }}>{sending ? "Envoi…" : mailSent[selectedDay] ? "✓ Envoyé" : "✉️ Envoyer récap"}</button>
+        </div>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+          {[
+            ["Sachets faits", dayTotal],
+            ["Préparateurs", byOperator.length],
+            ["Produits traités", byProduct.length],
+            ["Durée totale", fmtDuration(dayDurationMs)],
+          ].map(([lbl,val]) => (
+            <div key={lbl} style={{flex:"1 1 100px",background:"#fff8f0",borderRadius:8,padding:"8px 12px",textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:800,color:"#ef6c00"}}>{val}</div>
+              <div style={{fontSize:11,color:"#888"}}>{lbl}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Par préparateur */}
+      <div className="recap-card">
+        <h3>👤 Par préparateur</h3>
+        {byOperator.length === 0 && <div style={{color:"#999",fontSize:13}}>Aucune donnée.</div>}
+        {byOperator.map(o => (
+          <div key={o.name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #f0f0f0"}}>
+            <div>
+              <div style={{fontWeight:700}}>{o.name}</div>
+              <div style={{fontSize:11,color:"#999"}}>{fmtDuration(o.durationMs)} · {o.cadence} sachets/h · {o.produits.length} produit{o.produits.length>1?"s":""}</div>
+            </div>
+            <div style={{fontSize:22,fontWeight:800,color:"#ef6c00"}}>{o.sachets}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Par produit */}
+      <div className="recap-card">
+        <h3>📦 Par produit</h3>
+        {byProduct.map(p => {
+          const pct = p.target > 0 ? Math.min(100, Math.round((p.done/p.target)*100)) : 100;
+          return (
+            <div key={p.product} style={{marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
+                <span style={{fontWeight:600}}>{p.product}</span>
+                <span style={{color: p.done >= p.target ? "#2e7d32":"#ef6c00",fontWeight:700}}>
+                  {p.done} <span style={{color:"#bbb",fontWeight:400}}>/ {p.target} est.</span>
+                </span>
+              </div>
+              <div style={{background:"#eee",borderRadius:99,height:6,marginTop:3}}>
+                <div style={{height:"100%",borderRadius:99,background:p.done>=p.target?"#2e7d32":"#ef6c00",width:pct+"%"}} />
+              </div>
+              <div style={{fontSize:10,color:"#aaa",marginTop:2}}>{p.operators.join(", ")}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Historique détaillé */}
+      <div className="recap-card">
+        <h3>🕓 Historique détaillé</h3>
+        {doneEntries.map((e,i) => (
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:13}}>{e.product}</div>
+              <div style={{fontSize:11,color:"#999"}}>
+                {e.operator} · {fmtTime(e.startedAt)} → {fmtTime(e.finishedAt)} · {fmtDuration(e.durationMs||0)}
+                {e.inProgress != null && e.inProgress !== e.done ? <span> · en cours renseigné : {e.inProgress}</span> : ""}
+              </div>
+            </div>
+            <div style={{fontWeight:800,fontSize:18,color:"#ef6c00",marginLeft:8}}>{e.done}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+/* =========================================================================
+   APP ROOT
+   ========================================================================= */
+
+function App() {
+  const [operator, setOperator] = useState(localStorage.getItem("dispatch_operator") || "");
+  const [sessionId, setSessionId] = useState(localStorage.getItem("dispatch_sessionId") || "");
+  const [supplier, setSupplier] = useState(localStorage.getItem("dispatch_supplier") || "");
+  const [products, setProducts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dispatch_products") || "[]"); }
+    catch { return []; }
+  });
+  const [storeColumns, setStoreColumns] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dispatch_storeColumns") || "[]"); }
+    catch { return []; }
+  });
+  const [view, setView] = useState("dispatch"); // dispatch | recap | admin | adminSession | naming
+  const [mode, setMode] = useState(localStorage.getItem("dispatch_mode") || ""); // "" | "palette" | "mu"
+  const [recapData, setRecapData] = useState(null);
+  const [adminViewingSession, setAdminViewingSession] = useState(null);
+  const [namingData, setNamingData] = useState(null); // { supplier, products, storeColumns }
+
+  // Persistance locale du contexte
+  useEffect(() => {
+    if (sessionId) localStorage.setItem("dispatch_sessionId", sessionId);
+    if (supplier) localStorage.setItem("dispatch_supplier", supplier);
+    if (products.length > 0) localStorage.setItem("dispatch_products", JSON.stringify(products));
+    if (storeColumns.length > 0) localStorage.setItem("dispatch_storeColumns", JSON.stringify(storeColumns));
+  }, [sessionId, supplier, products, storeColumns]);
+
+  const handleChooseMode = (m) => {
+    localStorage.setItem("dispatch_mode", m);
+    setMode(m);
+    setView("dispatch");
+  };
+
+  const handleBackToMode = () => {
+    localStorage.removeItem("dispatch_mode");
+    setMode("");
+    setView("dispatch");
+  };
+
+  const handleSessionStart = (sid, sup, prods, storeCols) => {
+    setSessionId(sid);
+    setSupplier(sup);
+    setProducts(prods);
+    setStoreColumns(storeCols || []);
+    setView("dispatch");
+
+    if (firebaseReady) {
+      db.ref(`dispatch/${sid}/meta`).set({
+        supplier: sup,
+        startedAt: Date.now(),
+        products: prods,
+        storeColumns: storeCols || [],
+        createdBy: operator
+      });
+    }
+
+    // Notification Telegram de démarrage (non bloquant)
+    try {
+      fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "log-dispatch-start",
+          sessionId: sid,
+          supplier: sup,
+          operator: operator,
+          total: prods.length,
+          startedAt: new Date().toISOString()
+        })
+      }).catch(e => console.warn("Telegram start failed:", e));
+    } catch (e) {
+      console.warn("Telegram start error:", e);
+    }
+  };
+
+  const handleJoinSession = (sid) => {
+    if (!firebaseReady) return;
+    db.ref(`dispatch/${sid}/meta`).once("value").then(snap => {
+      const m = snap.val();
+      if (m) {
+        setSessionId(sid);
+        setSupplier(m.supplier || "Fournisseur");
+        setProducts(m.products || []);
+        setStoreColumns(m.storeColumns || []);
+        setView("dispatch");
+      }
+    });
+  };
+
+  const handleNeedsNaming = (data) => {
+    setNamingData(data);
+    setView("naming");
+  };
+
+  const handleNamingConfirm = (finalProducts, finalCols) => {
+    if (!namingData) return;
+    const sup = namingData.supplier;
+    const sessionId = `${stripAccents(sup).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase()}_${Date.now()}`;
+    setNamingData(null);
+    handleSessionStart(sessionId, sup, finalProducts, finalCols);
+  };
+
+  const handleNamingCancel = () => {
+    setNamingData(null);
+    setView("dispatch");
+  };
+
+  const handleFinish = (state, productsWithKeys) => {
+    setRecapData({ state, products: productsWithKeys });
+    setView("recap");
+  };
+
+  const handleLeaveSession = () => {
+    localStorage.removeItem("dispatch_sessionId");
+    localStorage.removeItem("dispatch_supplier");
+    localStorage.removeItem("dispatch_products");
+    localStorage.removeItem("dispatch_storeColumns");
+    setSessionId("");
+    setSupplier("");
+    setProducts([]);
+    setStoreColumns([]);
+    setRecapData(null);
+    setView("dispatch");
+  };
+
+  const handleResetCache = () => {
+    if (!confirm("Vider le cache de l'app ?\n\nCela supprime la session en cours sur CET appareil et toutes les données de produits en mémoire. À faire si les quantités affichées sont fausses. Tu devras recharger le fichier.")) return;
+    // Purge toutes les clés liées au dispatch (sauf prénom et mode)
+    Object.keys(localStorage)
+      .filter(k => k.startsWith("dispatch_") && k !== "dispatch_operator" && k !== "dispatch_mode")
+      .forEach(k => localStorage.removeItem(k));
+    setSessionId("");
+    setSupplier("");
+    setProducts([]);
+    setStoreColumns([]);
+    setRecapData(null);
+    setView("dispatch");
+    setTimeout(() => window.location.reload(), 100);
+  };
+
+  const handleLogout = () => {
+    if (!confirm("Te déconnecter ? Tu pourras te reconnecter avec un autre prénom.")) return;
+    localStorage.removeItem("dispatch_operator");
+    localStorage.removeItem("dispatch_sessionId");
+    localStorage.removeItem("dispatch_supplier");
+    localStorage.removeItem("dispatch_products");
+    localStorage.removeItem("dispatch_storeColumns");
+    localStorage.removeItem("dispatch_mode");
+    setOperator("");
+    setSessionId("");
+    setSupplier("");
+    setProducts([]);
+    setStoreColumns([]);
+    setRecapData(null);
+    setMode("");
+    setView("dispatch");
+  };
+
+  if (!operator) {
+    return <LoginScreen onLogin={setOperator} />;
+  }
+
+  // Écran de nommage des magasins inconnus
+  if (view === "naming" && namingData) {
+    return (
+      <NamingScreen
+        supplier={namingData.supplier}
+        products={namingData.products}
+        storeColumns={namingData.storeColumns}
+        onConfirm={handleNamingConfirm}
+        onCancel={handleNamingCancel}
+      />
+    );
+  }
+
+  if (view === "adminSession" && adminViewingSession) {
+    return (
+      <AdminSessionDetail
+        session={adminViewingSession}
+        onClose={() => { setAdminViewingSession(null); setView("admin"); }}
+      />
+    );
+  }
+
+  if (view === "admin") {
+    if (!isAdmin(operator)) {
+      return (
+        <div className="screen-center">
+          <div className="card">
+            <h3>Accès refusé</h3>
+            <p style={{color: "#666", fontSize: 13}}>Tu n'as pas les droits administrateur.</p>
+            <button className="btn-primary" onClick={() => setView("dispatch")}>Retour</button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <AdminScreen
+        operator={operator}
+        onClose={() => setView("dispatch")}
+        onViewSession={(s) => { setAdminViewingSession(s); setView("adminSession"); }}
+      />
+    );
+  }
+
+  // Choix du mode après connexion
+  if (!mode) {
+    return (
+      <ModeChoiceScreen
+        operator={operator}
+        onChoose={handleChooseMode}
+        onOpenAdmin={() => setView("admin")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // Mode Mise en unité
+  if (mode === "mu") {
+    return (
+      <MUScreen
+        operator={operator}
+        onBack={handleBackToMode}
+        onOpenAdmin={() => setView("admin")}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // ----- Mode Palette (dispatch classique) -----
+  if (!sessionId || products.length === 0) {
+    return (
+      <UploadScreen
+        operator={operator}
+        onSessionStart={handleSessionStart}
+        onJoinSession={handleJoinSession}
+        onOpenAdmin={() => setView("admin")}
+        onLogout={handleLogout}
+        onNeedsNaming={handleNeedsNaming}
+        onBackToMode={handleBackToMode}
+        onReset={handleResetCache}
+      />
+    );
+  }
+
+  if (view === "recap" && recapData) {
+    return (
+      <RecapScreen
+        sessionId={sessionId}
+        operator={operator}
+        supplier={supplier}
+        products={recapData.products}
+        storeColumns={storeColumns}
+        state={recapData.state}
+        onClose={() => setView("dispatch")}
+        onLeave={handleLeaveSession}
+      />
+    );
+  }
+
+  return (
+    <DispatchScreen
+      sessionId={sessionId}
+      operator={operator}
+      supplier={supplier}
+      products={products}
+      storeColumns={storeColumns}
+      onFinish={handleFinish}
+      onLeave={handleLeaveSession}
+    />
+  );
+}
+
+try {
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+} catch (e) {
+  console.error("Rendu impossible", e);
+  if (window.showBootError) window.showBootError("Erreur au démarrage de l'application.");
+}
+</script>
+</body>
+</html>
